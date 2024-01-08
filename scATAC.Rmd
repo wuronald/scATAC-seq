@@ -1,0 +1,30 @@
+---
+title: "scATAC"
+author: "Ronald Wu"
+date: '2024-01-08'
+output: html_document
+---
+
+# Setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Install packages
+```{r install packages}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("EnsDb.Mmusculus.v79")
+```
+
+# Load Libraries
+```{r load libraries}
+library(Signac)
+library(Seurat)
+library(EnsDb.Mmusculus.v79)
+library(ggplot2)
+library(patchwork)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
