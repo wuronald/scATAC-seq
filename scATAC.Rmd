@@ -4,6 +4,10 @@ author: "Ronald Wu"
 date: '2024-01-08'
 output: html_document
 ---
+# Signac Vignettes
+The purpose of this notebook is to learn how to use `Signac` for processing and analyzing scATAC-seq data. We'll be following the vignettes provided by the Stuart lab, which is the original developer of this package. All code is slightly modified from their original vignettes from the following:
++ [mouse_brain_vignette](https://stuartlab.org/signac/articles/mouse_brain_vignette)
++ 
 
 # Setup
 ```{r setup, include=FALSE}
@@ -16,15 +20,233 @@ if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
 BiocManager::install("EnsDb.Mmusculus.v79")
+BiocManager::install("biovizBase")
+
+remotes::install_github("stuart-lab/signac", ref="develop")
+
+install.packages("Matrix", type = "source")
+install.packages("irlba", type = "source")
+
+require(remotes)
+#install_version("Matrix", version = "1.5-3", repos = "http://cran.us.r-project.org")
+#install_version("Matrix", version = "1.6-1.1", repos = "http://cran.us.r-project.org")
+install_version("Matrix", version = "1.6.3", repos = "http://cran.us.r-project.org")
+
+#install_version("SeuratObject", version = "4.1.4", repos = "http://cran.us.r-project.org")
+
 ```
 
 # Load Libraries
 ```{r load libraries}
-library(Signac)
+library(Signac) # 1.12.9003 developmental
 library(Seurat)
 library(EnsDb.Mmusculus.v79)
-library(ggplot2)
+library(biovizBase)
+library(hdf5r)
+# library(ggplot2)
+library(tidyverse)
 library(patchwork)
+
+library(Matrix)
+library(irlba)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# Downloading 10x genomics scRNA-seq Adult mouse brain
+The associated data for this vignette is from [10x genomics](https://www.10xgenomics.com/resources/datasets/fresh-cortex-from-adult-mouse-brain-p-50-1-standard-1-1-0). 
+
+We will download the following 4 files:
+1. Peak by cell matrix (filtered)
+2. Per Barcode metrics (CSV)
+3. Fragments (TSV)
+4. Fragments index (TBI)
+
+We will be working on the output data from Cell Ranger 1.1.0. 
++ Sample: Fresh Cortex from Adult Mouse brain (P50)
++ Output: Cell Ranger ATAC 1.1.0
++ ~7700 transposed nuclei were loaded and 5337 nuclei were recovered
+
+
+```{bash download 10x data; echo = FALSE}
+# Peak by cell matrix HDF5 (filtered)
+wget -P 'data/vignette_data' \
+http://cf.10xgenomics.com/samples/cell-atac/1.1.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5
+
+# Per Barcode metrics (CSV)
+wget -P 'data/vignette_data' \
+http://cf.10xgenomics.com/samples/cell-atac/1.1.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_singlecell.csv
+
+# Fragments (TSV)
+wget -P 'data/vignette_data' \
+http://cf.10xgenomics.com/samples/cell-atac/1.1.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz
+
+# Fragments index (TBI)
+wget -P 'data/vignette_data' \
+http://cf.10xgenomics.com/samples/cell-atac/1.1.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz.tbi
+
+```
+
+# Pre-processing
+
+```{r pre-processing; echo = FALSE}
+
+# load counts matrix and metadata
+counts <- Read10X_h5("data/vignette_data/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5")
+metadata <- read.csv(
+  file = "data/vignette_data/atac_v1_adult_brain_fresh_5k_singlecell.csv",
+  header = TRUE,
+  row.names = 1
+)
+
+# create ChromatinAssay Object
+brain_assay <- CreateChromatinAssay(
+  counts = counts,
+  sep = c(":", "-"),
+  genome = "mm10",
+  fragments = 'data/vignette_data/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz',
+  min.cells = 1
+)
+
+# create Seurat Object
+brain <- CreateSeuratObject(
+  counts = brain_assay,
+  assay = 'peaks',
+  project = 'ATAC',
+  meta.data = metadata
+)
+
+# extract gene annotations from EnsDb
+annotations <- GetGRangesFromEnsDb(ensdb = EnsDb.Mmusculus.v79)
+
+# change to UCSC style since the data was mapped to GRCm38
+seqlevels(annotations) <- paste0('chr', seqlevels(annotations))
+genome(annotations) <- "mm10"
+
+# add the gene information to the object
+Annotation(brain) <- annotations
+```
+
+# QC Metrics
+## Nucleosome Signal and Banding Patterns
+Let's look at the following QC metrics to ensure good data quality prior to further analysis:
++ Nucleosome signal and banding pattern: A low nucleosome signal, which is the ratio of mono-nucleosome to nucleosome-free fragments, is preferred. We should also see a strong nucleosome banding pattern.  
++ Transcriptional start site (TSS) enrichment score: ratio of fragments at the TSS vs TSS-flanking regions for each cell. This is an indicator of signal-to-noise.
+
+```{r QC: Nucleosome Signal and banding pattern}
+# calculates nucleosome signal score per cell
+brain <- NucleosomeSignal(object = brain)
+
+# group cells by nucleosome signal
+brain$nucleosome_group <- ifelse(brain$nucleosome_signal > 4, 'NS > 4', 'NS < 4')
+
+# how many cells are NS < 4
+sum((brain$nucleosome_group == 'NS < 4')) # 5252
+
+# plot nucleosome signal
+hist(brain$nucleosome_signal)
+
+# plot FragmentHistogram at chr 1
+FragmentHistogram(object = brain,region = 'chr1-1-10000000')
+# plot FragmentHistogram grouped by nucleosome signal at chr 1
+FragmentHistogram(object = brain, group.by = 'nucleosome_group', region = 'chr1-1-10000000')
+
+```
+## TSS Enrichment Score
+
+```{r TSS Enrichment Score; echo = FALSE}
+# calculate TSS enrichment score 
+# note: To plot enrichment score centered at TSS in later steps, set FAST = FALSE (matrix of integration counts at each site required (slow)))
+# otherwise, set fast = TRUE if want to be faster, but won't be able to generate TSS centered plot
+
+#brain <- TSSEnrichment(brain, fast = TRUE)
+brain <- TSSEnrichment(brain, fast = FALSE)
+
+# histogram of TSS enrichment scores
+as_tibble(brain$TSS.enrichment) %>%
+  ggplot(aes(x = value)) +
+  geom_histogram() +
+  geom_vline(xintercept = 2,
+             linetype = "dotted",
+             color = "red")
+
+# group/categorize TSS enrichment as high or low
+brain$high.tss <- ifelse(brain$TSS.enrichment > 2, 'High', 'Low')
+
+# plot TSS enrichment score (centered at TSS)
+TSSPlot(brain, group.by = 'high.tss') + Seurat::NoLegend()
+
+```
+Dealing with an error for TSSEnrichment( fast = FALSE)
+> Error in slot(object = object, name = layer) : 
+  argument "slot" is missing, with no default
+  
+This issue has been reported and solved on [github](https://github.com/stuart-lab/signac/issues/1538). Re-install the developmental version of Signac from Github (1.12.9003). Works after restarting RStudio!
+
+## Additional QC Metrics: read in peaks, blacklist ratio
+```{r additional QC metrics}
+# add fraction of reads in peaks and blacklist ratio
+brain$pct_reads_in_peaks <- brain$peak_region_fragments / brain$passed_filters * 100
+brain$blacklist_ratio <- brain$blacklist_region_fragments / brain$peak_region_fragments
+
+VlnPlot(
+  object = brain,
+  features = c('pct_reads_in_peaks', 'peak_region_fragments',
+               'TSS.enrichment', 'blacklist_ratio', 'nucleosome_signal'),
+  pt.size = 0.1,
+  ncol = 5
+)
+
+DensityScatter(brain, x = 'peak_region_fragments', y = 'pct_reads_in_peaks', log_x = TRUE, quantiles = TRUE)
+```
+
+## Remove outliers based on QC metrics
+
+```{r remove outliers}
+brain <- subset(
+  x = brain,
+  subset = peak_region_fragments > 3000 &
+    peak_region_fragments < 100000 &
+    pct_reads_in_peaks > 40 &
+    blacklist_ratio < 0.025 &
+    nucleosome_signal < 4 &
+    TSS.enrichment > 2
+)
+brain
+```
+
+After filtering away the outliers based on the above thresholds, we see a reduction in the number of cells contained in the `brain` seurat object:
++ cell count prior to QC: 5337
++ cell count after QC: 3512 
+
+# Normalization and linear dimension reduction
+```{r normalization and linear dimension reduction}
+# perform Term Frequency-Inverse Document Frequency Normalization (TF-IDF)
+brain <- RunTFIDF(brain)
+# feature selection ('q0' uses all features; 'q75' uses top 25% of all peaks (faster))
+brain <- FindTopFeatures(brain, min.cutoff = 'q0')
+# dimension reduction
+brain <- RunSVD(object = brain)
+```
+
+TF-IDF, not sure how this works.
+After feature selection: 157203 Variable features
+
+Encountered an error with Signac::RunSVD()
+> Error in irlba(A = t(x = object), nv = n, work = irlba.work, tol = tol) : 
+  function 'as_cholmod_sparse' not provided by package 'Matrix'
+
+Potential Solutions:
+1. update/install `irlba` and `matrix` packages. [github](https://github.com/satijalab/seurat/issues/8100)
++ outcome: didn't work, still get the errors
++ current version of Matrix (1.6-4), irlba (2.3.5.1), Seurat (4.3.0.1)
+2. Downgrade Matrix to 1.5-3 or 1.6-1.1
+
+Another issue with compilation of the Matrix package:
+> ld: warning: directory not found for option '-L/usr/local/gfortran/lib/gcc/x86_64-apple-darwin18/8.2.0'
+ld: warning: directory not found for option '-L/usr/local/gfortran/lib'
+ld: library not found for -lgfortran
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+make: *** [Matrix.so] Error 1
+ERROR: compilation failed for package ‘Matrix’
+
++ potential [solution](https://medium.com/biosyntax/following-up-library-dependency-when-compiling-r-packages-89f191b9f227)
+
