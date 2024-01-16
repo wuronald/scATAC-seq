@@ -22,7 +22,7 @@ if (!require("BiocManager", quietly = TRUE))
 BiocManager::install("EnsDb.Mmusculus.v79")
 BiocManager::install("biovizBase")
 
-remotes::install_github("stuart-lab/signac", ref="develop")
+remotes::install_github("stuart-lab/signac", ref="develop") # installs v1.12.9003
 
 install.packages("Matrix", type = "source")
 install.packages("irlba", type = "source")
@@ -30,7 +30,7 @@ install.packages("irlba", type = "source")
 require(remotes)
 #install_version("Matrix", version = "1.5-3", repos = "http://cran.us.r-project.org")
 #install_version("Matrix", version = "1.6-1.1", repos = "http://cran.us.r-project.org")
-install_version("Matrix", version = "1.6.3", repos = "http://cran.us.r-project.org")
+#install_version("Matrix", version = "1.6.3", repos = "http://cran.us.r-project.org")
 
 #install_version("SeuratObject", version = "4.1.4", repos = "http://cran.us.r-project.org")
 
@@ -225,6 +225,8 @@ brain <- RunTFIDF(brain)
 brain <- FindTopFeatures(brain, min.cutoff = 'q0')
 # dimension reduction
 brain <- RunSVD(object = brain)
+# correlation between depth and reduced dimension components 
+DepthCor(brain)
 ```
 
 TF-IDF, not sure how this works.
@@ -235,12 +237,14 @@ Encountered an error with Signac::RunSVD()
   function 'as_cholmod_sparse' not provided by package 'Matrix'
 
 Potential Solutions:
-1. update/install `irlba` and `matrix` packages. [github](https://github.com/satijalab/seurat/issues/8100)
+1. update/install `irlba` and `matrix` packages from source. [github](https://github.com/satijalab/seurat/issues/8100)
 + outcome: didn't work, still get the errors
 + current version of Matrix (1.6-4), irlba (2.3.5.1), Seurat (4.3.0.1)
-2. Downgrade Matrix to 1.5-3 or 1.6-1.1
 
-Another issue with compilation of the Matrix package:
+2. Downgrade Matrix to 1.5-3 or 1.6-1.1
++ outcomes: didn't work, breaks compatibility with SeuratObject and Signac
+
+Another issue we encountered while updating/downgrading the Matrix Packages; Compilation issues:
 > ld: warning: directory not found for option '-L/usr/local/gfortran/lib/gcc/x86_64-apple-darwin18/8.2.0'
 ld: warning: directory not found for option '-L/usr/local/gfortran/lib'
 ld: library not found for -lgfortran
@@ -248,5 +252,27 @@ clang: error: linker command failed with exit code 1 (use -v to see invocation)
 make: *** [Matrix.so] Error 1
 ERROR: compilation failed for package ‘Matrix’
 
-+ potential [solution](https://medium.com/biosyntax/following-up-library-dependency-when-compiling-r-packages-89f191b9f227)
++ working [solution](https://medium.com/biosyntax/following-up-library-dependency-when-compiling-r-packages-89f191b9f227)
+
+## UMAP, FindNeighbors, clusters
+```{r umap}
+brain <- RunUMAP(
+  object = brain,
+  reduction = 'lsi',
+  dims = 2:30
+)
+brain <- FindNeighbors(
+  object = brain,
+  reduction = 'lsi',
+  dims = 2:30
+)
+brain <- FindClusters(
+  object = brain,
+  algorithm = 3,
+  resolution = 1.2,
+  verbose = FALSE
+)
+
+DimPlot(object = brain, label = TRUE) + NoLegend()
+```
 
