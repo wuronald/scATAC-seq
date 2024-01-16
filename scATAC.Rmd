@@ -4,6 +4,14 @@ author: "Ronald Wu"
 date: '2024-01-08'
 output: html_document
 ---
+# Single Cell ATAC-seq Analysis
+There are a few well known packages in R and python that can be used to analyze scATAC-seq data.
++ R Packages:
+  + Signac: developed by Tim Stuart while in the Satija lab. Actively maintained by Stuart lab.
+    + [website](https://stuartlab.org/signac/)
+  + ArchR: 
+    + [website](https://www.archrproject.com/)
+
 # Signac Vignettes
 The purpose of this notebook is to learn how to use `Signac` for processing and analyzing scATAC-seq data. We'll be following the vignettes provided by the Stuart lab, which is the original developer of this package. All code is slightly modified from their original vignettes from the following:
 + [mouse_brain_vignette](https://stuartlab.org/signac/articles/mouse_brain_vignette)
@@ -219,19 +227,15 @@ After filtering away the outliers based on the above thresholds, we see a reduct
 
 # Normalization and linear dimension reduction
 ```{r normalization and linear dimension reduction}
-# perform Term Frequency-Inverse Document Frequency Normalization (TF-IDF)
+# Term Frequency-Inverse Document Frequency Normalization (TF-IDF)
 brain <- RunTFIDF(brain)
 # feature selection ('q0' uses all features; 'q75' uses top 25% of all peaks (faster))
 brain <- FindTopFeatures(brain, min.cutoff = 'q0')
-# dimension reduction
+# dimension reduction using Singular Value Decomposition
 brain <- RunSVD(object = brain)
-# correlation between depth and reduced dimension components 
-DepthCor(brain)
+# Plot Sequencing Depth Correlation vs each reduced dimension component 
+DepthCor(brain, n = NULL) # n = NULL plots all the components; default n = 10;
 ```
-
-TF-IDF, not sure how this works.
-After feature selection: 157203 Variable features
-
 Encountered an error with Signac::RunSVD()
 > Error in irlba(A = t(x = object), nv = n, work = irlba.work, tol = tol) : 
   function 'as_cholmod_sparse' not provided by package 'Matrix'
@@ -253,26 +257,122 @@ make: *** [Matrix.so] Error 1
 ERROR: compilation failed for package ‘Matrix’
 
 + working [solution](https://medium.com/biosyntax/following-up-library-dependency-when-compiling-r-packages-89f191b9f227)
+--------
+After feature selection: 157203 Variable features
 
-## UMAP, FindNeighbors, clusters
-```{r umap}
+Due to the sparsity of scATAC-seq data, standard PCA analysis is not done. We would see a lot of intercell similarity due to the high frequency of 0's due to either non-accessible sites or not sampled sites. Latent Semantic Indexing (LSI) followed by SVD will find the most valuable info across samples and represent it in lower dimensional space. Thus, the dimensions are reduced and can be further visualized using UMAP or t-SNE (see next section)
+
+Correlation between depth and reduced dimension component plot shows that the --first-- LSI component is highly correlated with total number of counts for the cell. Downstream analysis will exclude this component and can be subset away with the `dim` parameter eg. `RunUMAP(..., dims = 2:30`.
+
+note: 
+1. Latent Semantic Indexing (lsi): From NLP, used to assess document similarity based on word counts. Adapting this NLP technique to single-cell data, it treats each sample as a 'document' and each peak/region as 'words'. 
+2. Term Frequency-Inverse Document Frequency Normalization (TF-IDF) is the metric that calculates the term frequency by depth normalization per cell, which is then normalized by the inverse of the document frequency.
+Thus each peak or 'word' is assigned an importance value. 
+
+
+## Plot UMAP with clusters
+```{r Plot the UMAP with clusters}
+# Runs the Uniform Manifold Approximation and Projection (UMAP) dimensional reduction technique on the `lsi` reduced data
 brain <- RunUMAP(
   object = brain,
   reduction = 'lsi',
   dims = 2:30
 )
+
+# Nearest-neighbor graph construction
 brain <- FindNeighbors(
   object = brain,
   reduction = 'lsi',
   dims = 2:30
 )
+# Cluster Determination
 brain <- FindClusters(
   object = brain,
-  algorithm = 3,
+  algorithm = 3, # SLM Algorithm
   resolution = 1.2,
   verbose = FALSE
 )
 
+# plot UMAP
 DimPlot(object = brain, label = TRUE) + NoLegend()
+
+SeuratObject::Graphs(brain)
+SeuratObject::Neighbors(brain)
+SeuratObject::Assays(brain)
+SeuratObject::Reductions(brain)
+brain$seurat_clusters
+```
+# Create a gene activity matrix
+
+We can quantify the activity by calculating the accessibility within each gene region, namely their respective promoter and gene body. This is simply done by summing the number of fragments that intersect the coordinates of the gene body and promoter region. Note, the function `Signac::GeneActivity()` extends the capture region for each TSS upstream by 2kb (default) to capture the promoter. The capture region at the TTS is not extended. 
+
+```{r gene activity matrix}
+# compute gene activities matrix (computes counts per cell in gene body and promoter region)
+gene.activities <- GeneActivity(brain) 
+
+# add the gene activity matrix to the Seurat object as a new assay
+brain[['RNA']] <- CreateAssayObject(counts = gene.activities)
+brain <- NormalizeData(
+  object = brain,
+  assay = 'RNA',
+  normalization.method = 'LogNormalize',
+  scale.factor = median(brain$nCount_RNA)
+)
+
+
+```
+Runtime: ~ 7 mins
+
+## Visualize gene activity at select marker genes
+Now we use the gene activity matrix as a proxy of gene activity. This is similar to plotting gene expression for a given set of marker genes, but note the scATAC-seq data is much more sparse, and that accessibility at a gene locus doesn't mean the gene is actually expressed.
+
+```{r gene activity plot}
+# switch the default assay from 'peaks' to 'RNA'
+DefaultAssay(brain) <- 'RNA'
+
+# plot UMAPs with gene activity at indicated genes (set via features param)
+FeaturePlot(
+  object = brain,
+  features = c('Sst','Pvalb',"Gad2","Neurod6","Rorb","Syt6"),
+  pt.size = 0.1,
+  max.cutoff = 'q95',
+  ncol = 3
+)
 ```
 
+# Integration with scRNA-seq data
+We can attempt to assign labels of cell types or cell states to the scATAC-seq clusters we generated earlier by using scRNA-seq data form the same biological system. This cross modality mapping can be done by Seurat using the reference labels from scRNA-seq data and project them into the scATAC-seq clusters.
+
+The normal brain scRNA-seq provided by the Allen institute will be used for this integration: 
+
+We will download the pre-processed Seurat object and load it into R. Further info regarding the code used to construct the object form the [raw](http://celltypes.brain-map.org/api/v2/well_known_file_download/694413985) can be found [here](https://github.com/satijalab/Integration2019/blob/master/preprocessing_scripts/allen_brain.R)
+
+```{bash download allen brain scRNA-seq seurat object; echo = FALSE}
+wget -P 'data/vignette_data/allen_brain_reference' https://signac-objects.s3.amazonaws.com/allen_brain.rds
+```
+
+```{r integration with scRNA-seq}
+# Load the pre-processed scRNA-seq data
+allen_rna <- readRDS("data/vignette_data/allen_brain_reference/allen_brain.rds")
+allen_rna <- UpdateSeuratObject(allen_rna)
+allen_rna <- FindVariableFeatures(
+  object = allen_rna,
+  nfeatures = 5000
+)
+
+transfer.anchors <- FindTransferAnchors(
+  reference = allen_rna,
+  query = brain,
+  reduction = 'cca',
+  dims = 1:40
+)
+
+predicted.labels <- TransferData(
+  anchorset = transfer.anchors,
+  refdata = allen_rna$subclass,
+  weight.reduction = brain[['lsi']],
+  dims = 2:30 # excluded first lsi component due to high correlation w/ counts
+)
+
+brain <- AddMetaData(object = brain, metadata = predicted.labels)
+```
