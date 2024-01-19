@@ -359,14 +359,15 @@ allen_rna <- FindVariableFeatures(
   object = allen_rna,
   nfeatures = 5000
 )
-
+# find a set of anchors between a reference and query dataset
 transfer.anchors <- FindTransferAnchors(
   reference = allen_rna,
   query = brain,
-  reduction = 'cca',
+  reduction = 'cca', # canonical correlation analysis
   dims = 1:40
 )
 
+# transfer anchors across single-cell datasets (scRNA-seq -> scATAC-seq)
 predicted.labels <- TransferData(
   anchorset = transfer.anchors,
   refdata = allen_rna$subclass,
@@ -376,3 +377,179 @@ predicted.labels <- TransferData(
 
 brain <- AddMetaData(object = brain, metadata = predicted.labels)
 ```
+
+When running the FindTransferAnchors() function, the reduction param selected is 'cca', which is the canonical correlation analysis. Other dimension reduction algorithms can be chosen for finding anchors.
+
+What is CCA and why is it used? Stuart et al. implemented previous for integrating single cell data. See his paper [here](https://doi.org/10.1016/j.cell.2019.05.031)
+
+## Plot UMAP with transferred labels from Allen brain scRNA-seq data
+```{r umap with scRNA-seq label transfers}
+plot1 <- DimPlot(allen_rna, group.by = 'subclass', label = TRUE, repel = TRUE) + NoLegend() + ggtitle('scRNA-seq')
+plot2 <- DimPlot(brain, group.by = 'predicted.id', label = TRUE, repel = TRUE) + NoLegend() + ggtitle('scATAC-seq')
+plot1 + plot2
+```
+
+We can see that most of the scATAC-seq clusters are now annotated with classification labels from scRNA-seq. A few on the left are not labelled. We can further transfer labels with their most likely predictions and assigned them at a per-cell basis.
+
+```{r label predictions}
+# Here are the 23 scATAC-seq clusters (only numbered)
+levels(brain)
+
+# access the barcodes
+Idents(brain) %>% head()
+
+# replace each label with its most likely prediction
+for(i in levels(brain)) {
+  cells_to_reid <- WhichCells(brain, idents = i) # identify cells matching certain criteria
+  newid <- names(which.max(table(brain$predicted.id[cells_to_reid]))) # choose the most common label in that cluster
+  Idents(brain, cells = cells_to_reid) <- newid
+}
+# now the numbered clusters have been renamed with their likely predictions
+levels(brain)
+
+```
+
+# Differentialy Accessible Peak Analysis (slow)
+
+We can identify differentially accessible (DA) peaks by comparing clusters. Two statistical approaches are suggested:
+1. Wilcoxon rank sum test via `presto` package. Can be run fast on a Seurat object
+2. Logistic regression (LR), with total number of fragments as a latent variable to control for effects of sequencing depth. (used in tutorial)
+
+Here we identify DA peaks between interneurons found in two different cortical layers, layer 2/3 Interneurons vs layer 4/5/6 Interneurons.
+
+```{r find differentially accessible peaks, eval = FALSE}
+#switch back to working with peaks instead of gene activities
+DefaultAssay(brain) <- 'peaks'
+
+da_peaks <- FindMarkers(
+  object = brain,
+  ident.1 = c("L2/3 IT"), 
+  ident.2 = c("L4", "L5 IT", "L6 IT"),
+  test.use = 'LR',
+  latent.vars = 'nCount_peaks'
+)
+```
+> This took 1 hour to run
+
+```{r DA peak stats}
+head(da_peaks)
+
+# total peaks:
+da_peaks %>%
+  nrow() # 39004
+
+# total DA peaks (padj < 0.05)
+da_peaks %>% 
+  filter(p_val_adj < 0.05) %>%
+  nrow() # 9405
+```
+
+## plot selected DA peak of interest
+```{r violin and feature plot for select DA peak}
+# choose the first DA peak
+rownames(da_peaks)[1]
+
+# violin plot for the first DA peak
+plot3 <- VlnPlot(
+  object = brain,
+  features = rownames(da_peaks)[1],
+  pt.size = 0.1,
+  idents = c("L4","L5 IT","L6 IT","L2/3 IT")
+)
+
+# umap showing accessibility of that peak
+plot4 <- FeaturePlot(
+  object = brain,
+  features = rownames(da_peaks)[1],
+  pt.size = 0.1,
+  max.cutoff = 'q95'
+)
+
+# plots
+(plot1 + plot2)/(plot3 | plot4)
+
+(plot2)/(plot3 | plot4)
+
+plot5 <- FeaturePlot(
+  object = brain,
+  features = rownames(da_peaks)[1],
+  pt.size = 0.1,
+  max.cutoff = 'q10'
+)
+
+# Compare q95 vs q10 as max cut off
+plot4 | plot5
+
+FeaturePlot(
+  object = brain,
+  features = rownames(da_peaks)[1],
+  pt.size = 0.1,
+  min.cutoff = 'q95'
+)
+```
+
+## Differential Accessibility by fold change (fast, but not statistically rigorous)
+Quick way to find DA peaks between two groups by comparing fold changes, but does not control for latent variables, such as the total sequencing depth between cells, nor does it allow for filtering by p value since no statistical tests are done.
+
+```{r fold changes for DA peaks}
+# calculate fold change between L2/3 IT vs L4/L5/L6
+fc <- FoldChange(brain, 
+                 ident.1 = c("L2/3 IT"),
+                 ident.2 = c("L4", "L5 IT", "L6 IT")
+)
+
+# order by fold change
+fc <- fc[order(fc$avg_log2FC, decreasing = TRUE), ]
+head(fc)
+
+# Can also use the fold changes calculated form LR DA peak analysis:
+  # filter top DA peaks open in Layers 2/3 compared to Layer4/5/6
+open_l23 <- rownames(da_peaks[da_peaks$avg_log2FC > 3, ])
+
+  # filter top DA peaks open in Layer4/5/6 compared to Layers 2/3
+open_l456 <- rownames(da_peaks[da_peaks$avg_log2FC < 3, ])
+
+  # map DA peaks to closest gene
+closest_l23 <- ClosestFeature(brain, open_l23)
+closest_l456 <- ClosestFeature(brain, open_l456)
+head(closest_l23)
+head(closest_l456)
+
+```
+After mapping the DA peaks to genes, we can conduct functional enrichment analysis to better understand the pathways that are enriched between the clusters (layer 2/3 vs layer 4/5/6 IT).
+
+# Plotting genomic regions
+The pseudobulk accessibility signal at Genomic regions can be plotted using the `CoveragePlot()` function with additional annotations that help interpretation of chromatin accessibility at the genomic level.
+```{r plot genomic regions}
+# set plotting order
+levels(brain) <- c("L2/3 IT","L4","L5 IT","L5 PT","L6 CT", "L6 IT","NP","Sst","Pvalb","Vip","Lamp5","Meis2","Oligo","Astro","Endo","VLMC","Macrophage")
+
+# plot genomic region at specific DA peak interval
+CoveragePlot(
+  object = brain,
+  region = rownames(da_peaks)[1],
+  extend.upstream = 40000,
+  extend.downstream = 20000
+)
+
+# plot genomic region at Neurod6 and Gad6 locus
+
+CoveragePlot(
+  object = brain,
+  region = c("Neurod6", "Gad2"),
+  extend.upstream = 1000,
+  extend.downstream = 1000,
+  ncol = 1
+)
+
+# plot the gene with top DA peak in L2/3, and top DA peak in L4/5/6
+CoveragePlot(
+  object = brain,
+  region = c("Fam154a", "Fam19a5"),
+  extend.upstream = 1000,
+  extend.downstream = 1000,
+  ncol = 1
+)
+```
+
+
