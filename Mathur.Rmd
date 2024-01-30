@@ -1,0 +1,430 @@
+---
+title: "Mathur"
+author: "Ronald Wu"
+date: '2024-01-29'
+output: html_document
+---
+
+# Introduction:
+
+A recent paper by Mathur et al titled ""Glioblastoma evolution and heterogeneity from a 3D whole-tumor perspective" conducted multiregional profiling of human GBM using scRNA-seq and scATAC-seq.
+
+The purpose of this notebook is to look at the scATAC-seq data only (not scRNA-seq) and analyze it using the Signac package. The scATAC-seq data is downloaded from GEO [GSE226726](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE226726). Much of the code will be copied from the Signac PBMC [vignette](https://stuartlab.org/signac/articles/pbmc_vignette) and modified to use Mathur's data.
+
+# What data is available from GEO GSE226726?
+
+
+# Install Missing libraries
+
+```{r install missing libs, echo = FALSE, eval = FALSE}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("EnsDb.Hsapiens.v86")
+```
+
+# Load libraries
+```{r load libraries}
+library(Signac) # 1.12.9003 developmental
+library(Seurat)
+#library(EnsDb.Mmusculus.v79)
+library(EnsDb.Hsapiens.v86)
+library(biovizBase)
+library(hdf5r)
+# library(ggplot2)
+library(tidyverse)
+library(patchwork)
+
+library(Matrix)
+library(irlba)
+```
+
+GSE226726
++ 4 GBM, 1 normal
+
+Samples with regional sampling:
+
+GSM7082653	SF519_4
+GSM7082654	SF519_5
+GSM7082655	SF519_7
+GSM7082656	SF521_2
+GSM7082657	SF521_3
+GSM7082658	SF521_7
+GSM7082659	SF521_8
+GSM7082660	SF524
+GSM7082661	SF529_10
+GSM7082662	SF529_8
+GSM7082663	SF529_4
+
+# Preamble with Mathur dataset
+Signac seems to require `fragments.tsv.gz` file usually outputted from Cell Ranger. This file is often not provided by scATAC-seq deposited on GEO, and is also missing from the Mathur dataset from GEO. 
+
+Thus, we will follow the Signac vignette as much as possible and note when the missing fragments file becomes an issue.
+
+One option is to get the Cell Ranger outputs from running the raw data thru the Cell Ranger pipeline on the cluster or obtain it from the original authors as a last resort.
+
+I've also noticed the GEO dataset  has the GeneActivity matrix from Signac as a .rdata file. We will explore and see if this is just the matrix or the seurat object.
+
+# Downloading Mathur et al scATAC-seq data
+
+```{bash download from GSE226726, echo = FALSE, eval = FALSE}
+# GSE226726: GSE226726_519_chromvar.Rdata.gz	
+wget -P 'data/Mathur/GSE226726/' \
+https://ftp.ncbi.nlm.nih.gov/geo/series/GSE226nnn/GSE226726/suppl/GSE226726%5F519%5Fchromvar.Rdata.gz
+
+# GSE226726:: GSE226726_P519_filtered_metadata.tsv.gz
+wget -P 'data/Mathur/GSE226726/' \
+https://ftp.ncbi.nlm.nih.gov/geo/series/GSE226nnn/GSE226726/suppl/GSE226726%5FP519%5Ffiltered%5Fmetadata.tsv.gz
+
+# GSE226726: RNA-seq optional
+wget -P 'data/Mathur/GSE226726/' \
+https://ftp.ncbi.nlm.nih.gov/geo/series/GSE226nnn/GSE226726/suppl/GSE226726%5F519%5Frna.Rdata.gz
+
+# GSM7082654	SF519_5: 
+wget -P 'data/Mathur/GSE226726/GSM7082654' \
+https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7082nnn/GSM7082654/suppl/GSM7082654%5Fsf519.5.raw%5Fpeak%5Fbc%5Fmatrix.h5
+
+wget -P 'data/Mathur/GSE226726/GSM7082654' \
+https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7082nnn/GSM7082654/suppl/GSM7082654%5Fsf519.5.singlecell.csv.gz
+```
+
+# Explore chromvar.Rdata
+Let's explore the contents of the rdata file
+```{r chromvar.Rdata import}
+# load chromvar.Rdata file
+load("data/Mathur/GSE226726/GSE226726_519_chromvar.Rdata")
+
+# an object called chromvar_obj is populated into the global environment
+class(chromvar_obj) # SeuratObject
+str(chromvar_obj)
+View(chromvar_obj)
+```
+
+## Observations
+1. loading in chromvar.Rdata loads in a SeuratObject with chromvar results. It does not contain a counts matrix or fragments, since it is so small.
+2. 
+
+# Explore GSE226726_519_rna.Rdata.gz
+From GEO, it's unclear if this file is snRNA-seq/scRNA-seq or scATAC-seq/snATAC-seq data. From the paper, it says the GEO repository only has ATAC-seq data, so this file could be the result of running Signac for Gene Activity. Need to confirm!
+
+Note: 
++ need to unzip the .gz file first. Weirdly, mac removed the .Rdata extension after unpacking. need to readd it.
++ 461 mb unpacks to 1.62 gb
+
+```{r rdata import rna.Rdata.gz}
+load("data/Mathur/GSE226726/GSE226726_519_rna.Rdata")
+# an object called gene.activities is populated into the global environment
+
+class(gene.activities) # dgCMatrix
+str(gene.activities)
+View(gene.activities)
+```
+
+## Observations:
+1. loading GSE226726_519_rna.Rdata is the gene.activities dgCMatrix, likely from Signac
+
+# Signac preprocessing:
+Let's follow the Signac PBMC vignette for loading data.
+
+Try on smallest dataset (GSM7082654) first among all samples:
++ Patient: sf519 
++ region: 5 
+
+```{r load object}
+# For output from CellRanger < 3.0
+  #data_dir <- 'data/Guilhamon/GSM4131776/'
+  #list.files(data_dir) # Should show barcodes.tsv, genes.tsv, and matrix.mtx
+  # expression_matrix <- Read10X(data.dir = data_dir)
+
+# load counts matrix and metadata
+counts <- Read10X_h5("data/Mathur/GSE226726/GSM7082654/GSM7082654_sf519.5.raw_peak_bc_matrix.h5")
+metadata <- read.csv(
+  file = "data/Mathur/GSE226726/GSM7082654/GSM7082654_sf519.5.singlecell.csv.gz",
+  header = TRUE,
+  row.names = 1
+)
+
+# review counts object
+class(counts) # dgCMatrix
+str(counts)
+
+
+# create ChromatinAssay Object
+brain_assay <- CreateChromatinAssay(
+  counts = counts,
+  sep = c(":", "-"),
+  genome = "hg38",
+  #fragments = 'data/vignette_data/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz',
+  min.cells = 1
+)
+
+# create Seurat Object
+brain <- CreateSeuratObject(
+  counts = brain_assay,
+  assay = 'peaks',
+  project = 'ATAC',
+  meta.data = metadata
+)
+
+# remove brain_assay from memory
+brain_assay<-NULL
+
+brain[['peaks']]
+granges(brain)
+# add gene annotations to the object
+  # EnsDb.Hsapiens.v86 is for hg38 and EnsDb.Hsapiens.v75 is for hg19
+# extract gene annotations from EnsDb
+annotations <- GetGRangesFromEnsDb(ensdb = EnsDb.Hsapiens.v86)
+
+# change to UCSC style since the data was mapped to hg38
+seqlevels(annotations) <- paste0('chr', seqlevels(annotations))
+genome(annotations) <- "hg38"
+# add the gene information to the object
+Annotation(brain) <- annotations
+```
+
+Looks like objected loaded properly but no fragments file.
+
+# Computing QC metrics
+Note: we can use the filtering criteria determined by the paper. Details are on GEO as follows:
+> 	
+Samples were processed individually using CellRanger ATAC v1.2.0 and aligned to the hg38 reference genome. Files were generated using CellRanger ATAC count.
+Spatially delineated samples from the same patient were processed and merged in Signac v1.6.0, thresholded by features present in 10+ cells, peak_region_fragments > 3000, pct_reads_in_peaks > 15, blacklist_ratio < 0.05 and lowmapq < 30000. and normalized by the mean signal from a randomly selected subpopulation of 5000 peaks.
+Data was processed using TF-IDF and LSI in Signac, followed by UMAP construction on components 2:30 with the following parameters: n.neighbours=71L, min.dist=0.4, spread=1.5, repulsion.strength=1.1 followed by Louvain nearest neighbour clustering.
+Copy-scAT was used to call copy number alterations and putative ecDNAs, followed by cluster-based averaging. ChromVAR and GeneActivity matrices were generated using Signac and the JASPAR 2021 and Ensembl v86 references respectively.
+Assembly: hg38
+Supplementary files format and content: Sample-level raw h5 matrix, singlecell.csv metadata file
+Supplementary files format and content: Patient-level processed GeneActivity and ChromVAR Matrix (.rdata format), and filtered patient-level metadata file (.tsv)
+
+Below requires fragment files:
+```{r QC: Nucleosome Signal and banding pattern}
+# calculates nucleosome signal score per cell
+brain <- NucleosomeSignal(object = brain)
+
+# group cells by nucleosome signal
+brain$nucleosome_group <- ifelse(brain$nucleosome_signal > 4, 'NS > 4', 'NS < 4')
+
+# how many cells are NS < 4
+sum((brain$nucleosome_group == 'NS < 4')) # 5252
+
+# plot nucleosome signal
+hist(brain$nucleosome_signal)
+
+# plot FragmentHistogram at chr 1
+FragmentHistogram(object = brain,region = 'chr1-1-10000000')
+# plot FragmentHistogram grouped by nucleosome signal at chr 1
+FragmentHistogram(object = brain, group.by = 'nucleosome_group', region = 'chr1-1-10000000')
+
+```
+Below requires fragment files:
+
+```{r TSS Enrichment Score; echo = FALSE}
+# calculate TSS enrichment score 
+# note: To plot enrichment score centered at TSS in later steps, set FAST = FALSE (matrix of integration counts at each site required (slow)))
+# otherwise, set fast = TRUE if want to be faster, but won't be able to generate TSS centered plot
+
+#brain <- TSSEnrichment(brain, fast = TRUE)
+brain <- TSSEnrichment(brain, fast = FALSE)
+
+# histogram of TSS enrichment scores
+as_tibble(brain$TSS.enrichment) %>%
+  ggplot(aes(x = value)) +
+  geom_histogram() +
+  geom_vline(xintercept = 2,
+             linetype = "dotted",
+             color = "red")
+
+# group/categorize TSS enrichment as high or low
+brain$high.tss <- ifelse(brain$TSS.enrichment > 2, 'High', 'Low')
+
+# plot TSS enrichment score (centered at TSS)
+TSSPlot(brain, group.by = 'high.tss') + Seurat::NoLegend()
+
+```
+## Additional QC Metrics: read in peaks, blacklist ratio
+```{r additional QC metrics}
+# add fraction of reads in peaks and blacklist ratio
+brain$pct_reads_in_peaks <- brain$peak_region_fragments / brain$passed_filters * 100
+brain$blacklist_ratio <- brain$blacklist_region_fragments / brain$peak_region_fragments
+
+VlnPlot(
+  object = brain,
+  features = c('nCount_peaks',
+               'pct_reads_in_peaks',
+               'peak_region_fragments'
+               ),
+  pt.size = 0.1,
+  ncol = 4
+)
+
+# DensityScatter(brain, x = 'peak_region_fragments', y = 'pct_reads_in_peaks', log_x = TRUE, quantiles = TRUE)
+```
+Error: vector memory exhausted (limit reached?)
+Don't plot density scatter on laptop.
+
+## Remove outliers based on QC metrics
+
+Note: TSS.enrichment, nucleosome_signal were omitted because no fragment file, and blacklist_ratio was omitted since NaN from 0/0.
+
+Spatially delineated samples from the same patient were processed and merged in Signac v1.6.0, thresholded by features present in 10+ cells, peak_region_fragments > 3000, pct_reads_in_peaks > 15, blacklist_ratio < 0.05 and lowmapq < 30000. and normalized by the mean signal from a randomly selected subpopulation of 5000 peaks.
+```{r remove outliers}
+
+(brain$lowmapq>30000) %>% sum # 255
+(brain$lowmapq<30000) %>% sum # 624635
+(brain$blacklist_ratio>0.05) %>% sum
+sf519_5 <- subset(
+  x = brain,
+  subset = 
+    peak_region_fragments > 3000 &
+    peak_region_fragments < 100000 &
+    pct_reads_in_peaks > 15 &
+    blacklist_ratio < 0.05 &
+    lowmapq < 30000
+)
+brain$is__cell_barcode %>% length # 624890
+sf519_5$is__cell_barcode %>% length # 852
+```
+From 624890 cells to 852 after filtering. This seems like a huge reduction, but is this correct? Yes! 
+In fact, we will see later on, the imported gene activity matrix from the authors, actually only has 852 cells or barcodes corresponding to this patient sample sf519_5, which is exactly what we got.
+
+Even removing the blacklist_ratio as criteria, we will end up with 852 cells.
+
+# Normalization and linear dimensional reduction
+```{r normalization and linear dimentional reduction}
+sf519_5 <- RunTFIDF(sf519_5)
+sf519_5 <- FindTopFeatures(sf519_5, min.cutoff = 'q0')
+sf519_5 <- RunSVD(sf519_5)
+
+DepthCor(sf519_5)
+```
+Strong correlation with the first component, so we will remember to remove it downstream.
+```{r export pdf, eval=FALSE}
+pdf("results/Mathur/2024-01-29_sf519_5_DepthCor_plot.pdf")
+DepthCor(sf519_5)
+dev.off()
+```
+# Non-linear dimension reduction and clustering
+```{r Non-linear dimension reduction and clustering}
+sf519_5 <- RunUMAP(
+  object = sf519_5,
+  reduction = 'lsi',
+  dims = 2:30
+)
+sf519_5 <- FindNeighbors(
+  object = sf519_5,
+  reduction = 'lsi',
+  dims = 2:30
+)
+sf519_5 <- FindClusters(
+  object = sf519_5,
+  algorithm = 3, # SLM algorithm
+  resolution = 1.2,
+  verbose = FALSE
+)
+
+DimPlot(object = sf519_5, label = TRUE)
+```
+
+# Create a gene activity matrix
+
+Note we imported it earlier from `rna.Rdata.gz`, but it looks like it's for all the samples in the dataset. Unsure if it will work if we don't subset the columns. For example, one of the columns is `P519_5_CACGTTCAGTTAGCAA-1`.
+
+Should we filter barcodes for prefix `P519_5`, and then remove the prefix.
+
+```{r gene activity matrix}
+
+# compute gene activities
+#gene.activities <- GeneActivity(sf519_5)
+
+# convert gene activity matrix to seurat object
+sf519_5_gene.activities <- CreateAssayObject(counts = gene.activities)
+
+# subset seurat object based on the patient sample id and region prefix "P519_5_"
+sf519_5_gene.activities <- sf519_5_gene.activities[, grep(paste0("^", "P519_5_"), colnames(sf519_5_gene.activities))]
+
+# remove prefix from barcodes
+colnames(sf519_5_gene.activities) <- sub(paste0("^", "P519_5_"), "", colnames(sf519_5_gene.activities))
+
+# add the gene activity matrix to the Seurat object as a new assay
+sf519_5[['RNA']] <- CreateAssayObject(counts = sf519_5_gene.activities)
+
+sf519_5 <- NormalizeData(
+  object = sf519_5,
+  assay = 'RNA',
+  normalization.method = 'LogNormalize',
+  scale.factor = median(sf519_5$nCount_RNA)
+)
+```
+
+# plotting with gene activity matrix
+```{r gene activity plots}
+# switch from peaks assat to RNA assay
+DefaultAssay(sf519_5) <- 'RNA'
+
+FeaturePlot(
+  object = sf519_5,
+  features = c("CA9","VEGFA","SLC2A1","VIM"),
+  pt.size = 0.1,
+  max.cutoff = 'q95',
+  ncol = 3
+)
+
+VlnPlot(
+  object = sf519_5,
+  features = c('CA9',
+               'VEGFA',
+               'SLC2A1',
+               'VIM'
+               ),
+  pt.size = 0.1,
+  ncol = 4
+)
+
+FeaturePlot(
+  object = sf519_5,
+  features = c("SOX2"),
+  pt.size = 0.1,
+  max.cutoff = 'q95',
+  ncol = 3
+)
+```
+
+# Differentially Accessible Peak Analysis
+##1. Cluster 0 vs Cluster 1
+```{r find differentially accessible peaks Cluster 0 vs Cluster1, eval = FALSE}
+#switch back to working with peaks instead of gene activities
+DefaultAssay(sf519_5) <- 'peaks'
+
+sf519_5_DA <- FindMarkers(
+  object = sf519_5,
+  ident.1 = c("0"), 
+  ident.2 = c("1"),
+  test.use = 'LR',
+  latent.vars = 'nCount_peaks'
+)
+
+# total peaks
+sf519_5_DA %>% nrow() # 20096
+
+# significant peaks
+sf519_5_DA %>% 
+  filter(p_val_adj < 0.05) %>%
+  nrow() # 2602
+
+# significant peaks (log2FC > 1 ; cluster 0 > cluster 1)
+sf519_5_DA %>% 
+  filter(p_val_adj < 0.05 & avg_log2FC > 1) %>%
+  nrow() # 1064
+# significant peaks (log2FC < -1 ; cluster 1 > cluster 0)
+sf519_5_DA %>% 
+  filter(p_val_adj < 0.05 & avg_log2FC < -1) %>%
+  nrow() # 1533
+```
+> Total Runtime: 10:00 am to 10:16
+
+```{r save session unload objects}
+gene.activities <- NULL
+brain <- NULL
+subset_seurat <- NULL
+save.image("2024-01-30_Mathur")
+```
