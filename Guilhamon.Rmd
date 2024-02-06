@@ -229,11 +229,66 @@ In the future, should revisit and get these files by running cell ranger on the 
 G4218_subset <- RunTFIDF(G4218_subset)
 G4218_subset <- FindTopFeatures(G4218_subset, min.cutoff = 'q0')
 G4218_subset <- RunSVD(G4218_subset)
+
+DepthCor(G4218_subset)
 ```
 
 Strong correlation with the first component, so we will remember to remove it downstream.
 ```{r export pdf, eval=FALSE}
 pdf("results/Guilhamon/2024-01-30_G4218_DepthCor_plot.pdf")
-DepthCor(sf519_5)
+DepthCor(G4218_subset)
 dev.off()
 ```
+# Non-linear dimension reduction and clustering
+```{r Non-linear dimension reduction and clustering}
+G4218_subset <- RunUMAP(
+  object = G4218_subset,
+  reduction = 'lsi',
+  dims = 2:30
+)
+G4218_subset <- FindNeighbors(
+  object = G4218_subset,
+  reduction = 'lsi',
+  dims = 2:30
+)
+G4218_subset <- FindClusters(
+  object = G4218_subset,
+  algorithm = 3, # SLM algorithm
+  resolution = 1.2,
+  verbose = FALSE
+)
+
+DimPlot(object = G4218_subset, label = TRUE)
+```
+
+```{r export pdf, eval=FALSE}
+pdf("results/Guilhamon/2024-01-30_G4218_UMAP_plot.pdf")
+DimPlot(object = G4218_subset, label = TRUE)
+dev.off()
+```
+
+# gene activity matrix
+
+```{r gene activity matrix}
+
+# compute gene activities
+gene.activities <- GeneActivity(G4218_subset)
+gene.activities <- GeneActivity(sf519_5)
+
+# convert gene activity matrix to seurat object
+G4218_subset_gene.activities <- CreateAssayObject(counts = gene.activities)
+
+# add the gene activity matrix to the Seurat object as a new assay
+sf519_5[['RNA']] <- CreateAssayObject(counts = sf519_5_gene.activities)
+
+sf519_5 <- NormalizeData(
+  object = sf519_5,
+  assay = 'RNA',
+  normalization.method = 'LogNormalize',
+  scale.factor = median(sf519_5$nCount_RNA)
+)
+```
+> Extracting gene coordinates
+Error in GeneActivity(sf519_5) : 
+  No fragment information found for requested assay
+  

@@ -21,6 +21,11 @@ if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
 BiocManager::install("EnsDb.Hsapiens.v86")
+
+BiocManager::install("JASPAR2020")
+BiocManager::install("TFBSTools")
+BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
+BiocManager::install("motifmatchr")
 ```
 
 # Load libraries
@@ -37,21 +42,31 @@ library(patchwork)
 
 library(Matrix)
 library(irlba)
+
+# motif analysis:
+library(JASPAR2020)
+library(TFBSTools)
+library(BSgenome.Hsapiens.UCSC.hg38) # motifs for hg38
+library(motifmatchr)
+library(ggseqlogo) # version 0.1 installed from archive on cran
 ```
 
 GSE226726
 + 4 GBM, 1 normal
 
-Samples with regional sampling:
+GBM Samples (note some have regional sampling):
 
 GSM7082653	SF519_4
 GSM7082654	SF519_5
 GSM7082655	SF519_7
+
 GSM7082656	SF521_2
 GSM7082657	SF521_3
 GSM7082658	SF521_7
 GSM7082659	SF521_8
+
 GSM7082660	SF524
+
 GSM7082661	SF529_10
 GSM7082662	SF529_8
 GSM7082663	SF529_4
@@ -361,9 +376,16 @@ sf519_5 <- NormalizeData(
 # switch from peaks assat to RNA assay
 DefaultAssay(sf519_5) <- 'RNA'
 
-FeaturePlot(
+b<-FeaturePlot(
   object = sf519_5,
-  features = c("CA9","VEGFA","SLC2A1","VIM"),
+  features = c(
+               'VEGFA',
+               'NDRG1',
+               "ADM",
+               "AKAP12",
+               'ENO2',
+               'SLC2A1'
+               ),
   pt.size = 0.1,
   max.cutoff = 'q95',
   ncol = 3
@@ -371,10 +393,13 @@ FeaturePlot(
 
 VlnPlot(
   object = sf519_5,
-  features = c('CA9',
+  features = c(
                'VEGFA',
-               'SLC2A1',
-               'VIM'
+               'NDRG1',
+               "ADM",
+               "AKAP12",
+               'ENO2',
+               'SLC2A1'
                ),
   pt.size = 0.1,
   ncol = 4
@@ -387,6 +412,18 @@ FeaturePlot(
   max.cutoff = 'q95',
   ncol = 3
 )
+
+a <- DimPlot(object = sf519_5, label = TRUE)
+b
+```
+
+## pdf
+
+```{r export pdf, eval=FALSE}
+pdf("results/Mathur/2024-01-31_sf519_5_UMAP_plot.pdf")
+a
+b
+dev.off()
 ```
 
 # Differentially Accessible Peak Analysis
@@ -422,9 +459,118 @@ sf519_5_DA %>%
 ```
 > Total Runtime: 10:00 am to 10:16
 
-```{r save session unload objects}
+```{r save session unload objects; eval = FALSE, echo = FALSE}
 gene.activities <- NULL
 brain <- NULL
 subset_seurat <- NULL
 save.image("2024-01-30_Mathur")
 ```
+
+# load rdata
+```{r load rdata, eval = FALSE, echo = FALSE}
+load("2024-01-30_Mathur.RData")
+```
+This above session should have the analysis of sf519 up to the point of differentially accessible peak analysis.
+
+# Motif analysis:
+## Adding motif info to seurat object
+```{r add motif info}
+# Get a list of motif position frequency matrices from the JASPAR database
+pfm <- getMatrixSet(
+  x = JASPAR2020,
+  opts = list(collection = "CORE", tax_group = 'vertebrates', all_versions = FALSE)
+)
+
+# switch modes for object
+DefaultAssay(sf519_5) <- 'peaks'
+
+# add motif information to seurat object
+sf519_5 <- AddMotifs(
+  object = sf519_5,
+  genome = BSgenome.Hsapiens.UCSC.hg38,
+  pfm = pfm
+)
+```
+
+## Finding overrepresented motifs 
+
+We previously calculated the DA peaks from cluster 0 v cluster 1. We now can identify the motifs that are enriched in those peaks. However, we need to lower the `min.pct` threshold from the default to `0.05`. 
+
+```{r overrepresented motifs}
+
+# previous DA peaks from cluster 0 vs cluster 1
+sf519_5_DA
+
+# new DA peaks with min.pct = 0.05
+sf519_5_DA_new <- FindMarkers(
+  object = sf519_5,
+  ident.1 = "0",
+  ident.2 = "1",
+  only.pos = TRUE,
+  test.use = 'LR',
+  min.pct = 0.05,
+  latent.vars = 'nCount_peaks'
+)
+
+# differences in significant peaks from new analysis
+sf519_5_DA %>% 
+  filter(p_val_adj<0.05) %>% 
+  nrow() # 2602
+
+sf519_5_DA_new %>% 
+  filter(p_val_adj<0.05) %>% 
+  nrow() # 1082
+
+# get top differentially accessible peaks (vignette uses unadjusted pval)
+top.da.peak <- rownames(sf519_5_DA_new[sf519_5_DA_new$p_val < 0.005, ]) #5471
+
+# optional: choosing a set of background peaks
+  # find peaks open in the cluster were are comparing (cluster 0 vs cluster 1)
+open.peaks <- AccessiblePeaks(sf519_5, idents = c("0", "1"))
+
+  # match the overall GC content in the peak set
+meta.feature <- GetAssayData(sf519_5, assay = "peaks", slot = "meta.features")
+  
+peaks.matched <- MatchRegionStats(
+  meta.feature = meta.feature[open.peaks, ],
+  query.feature = meta.feature[top.da.peak, ],
+  n = 50000
+)
+
+# test enrichment (without background)
+enriched.motifs <- FindMotifs(
+  object = sf519_5,
+  features = top.da.peak
+)
+
+# test enrichment (with background)
+enriched.motifs_bg <- FindMotifs(
+  object = sf519_5,
+  background = peaks.matched,
+  features = top.da.peak
+)
+
+# stats
+enriched.motifs %>% 
+  filter(p.adjust < 0.05) # 714
+enriched.motifs_bg %>% 
+  filter(p.adjust < 0.05) # 74
+enriched.motifs %>% head() %>% pull(motif.name) %>% sort()
+enriched.motifs_bg %>% head() %>% pull(motif.name) %>% sort()
+
+hist(enriched.motifs$fold.enrichment)
+hist(enriched.motifs_bg$fold.enrichment)
+```
+
+Using the GC-matched background had a big impact on the total significantly enriched motifs identified (p.adjust < 0.05), where it went from 714 to 74 (using GC-matched background).
+
+## plot position weight matrices for select motifs
+```{r plot PWM for motifs of interest}
+
+# plot for top 5 motifs
+MotifPlot(
+  object = sf519_5,
+  motifs = head(rownames(enriched.motifs_bg))
+)
+```
+## compute motif activity score on a per cell basis (via chromVAR)
