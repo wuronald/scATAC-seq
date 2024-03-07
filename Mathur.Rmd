@@ -573,4 +573,78 @@ MotifPlot(
   motifs = head(rownames(enriched.motifs_bg))
 )
 ```
+## Compare motif analysis between cluster 1 vs cluster 0
+Does the order of comparision matter, since we were comparing cluster 0 vs 1. We observed that there were no negative fold-changes. 
+
+```{r overrepresented motifs swap cluster}
+
+# swap comparisions to cluster 1 vs cluster 0
+# new DA peaks with min.pct = 0.05
+sf519_5_DA_swap <- FindMarkers(
+  object = sf519_5,
+  ident.1 = "1",
+  ident.2 = "0",
+  only.pos = TRUE,
+  test.use = 'LR',
+  min.pct = 0.05,
+  latent.vars = 'nCount_peaks'
+)
+
+# differences in significant peaks from new analysis
+sf519_5_DA_new %>% 
+  filter(p_val_adj<0.05) %>% 
+  nrow() # 1082
+
+sf519_5_DA_swap %>% 
+  filter(p_val_adj<0.05) %>% 
+  nrow() # 1536
+
+# get top differentially accessible peaks (vignette uses unadjusted pval)
+top.da.peak_swap <- rownames(sf519_5_DA_swap[sf519_5_DA_swap$p_val < 0.005, ]) #5913
+
+# optional: choosing a set of background peaks
+  # find peaks open in the cluster were are comparing (cluster 1 vs cluster 0)
+open.peaks_swap <- AccessiblePeaks(sf519_5, idents = c("1", "0"))
+
+  # match the overall GC content in the peak set
+meta.feature_swap <- GetAssayData(sf519_5, assay = "peaks", slot = "meta.features")
+  
+peaks.matched_swap <- MatchRegionStats(
+  meta.feature = meta.feature_swap[open.peaks_swap, ],
+  query.feature = meta.feature_swap[top.da.peak_swap, ],
+  n = 50000
+)
+
+# test enrichment (without background)
+enriched.motifs_swap <- FindMotifs(
+  object = sf519_5,
+  features = top.da.peak_swap
+)
+
+# test enrichment (with background)
+enriched.motifs_bg_swap <- FindMotifs(
+  object = sf519_5,
+  background = peaks.matched_swap,
+  features = top.da.peak_swap
+)
+
+# stats
+enriched.motifs_swap %>% 
+  filter(p.adjust < 0.05) # 709
+enriched.motifs_bg_swap %>% 
+  filter(p.adjust < 0.05) # 217
+enriched.motifs_swap %>% head() %>% pull(motif.name) %>% sort()
+enriched.motifs_bg_swap %>% head() %>% pull(motif.name) %>% sort()
+
+hist(enriched.motifs_swap$fold.enrichment)
+hist(enriched.motifs_bg_swap$fold.enrichment)
+
+# are the motifs different? yes
+enriched.motifs %>% head() %>% pull(motif.name)
+enriched.motifs_swap %>% head() %>% pull(motif.name)
+
+sf519_5_DA_new$avg_log2FC %>% range() # [1]  0.2501606 12.3436208
+sf519_5_DA_swap$avg_log2FC %>% range() # [1]  0.2500721 12.5867996
+```
+
 ## compute motif activity score on a per cell basis (via chromVAR)

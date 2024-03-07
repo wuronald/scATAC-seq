@@ -1,0 +1,137 @@
+---
+title: "Guilhamon_preprocessing"
+author: "Ronald Wu"
+date: '2024-03-05'
+output: html_document
+---
+
+# Load Modules on Computing Cluster
+Make sure you are on the H4H cluster login node, since we need internet connection to download the datasets.
+
+```{bash load modules}
+module load sratoolkit/3.0.7
+```
+
+# Download FASTQ-files from SRA-accessions
+
+## Method 1: Using commands from SRA toolkit
+
+The login node for the computing cluster has access to the internet. We can load the SRA toolkit, which is installed on the cluster, and run commands to download the dataset in `.sra` format.
+
+The following commands are based on the [documentation](https://github.com/ncbi/sra-tools/wiki/08.-prefetch-and-fasterq-dump).
+
+Note: In my experience, this downloading process is very slow. Direct download might be better (see metho 2).
+
+
+```{bash download files from SRA}
+# on the login node
+cd ~
+mkdir SRA
+cd ~/SRA
+
+prefetch SRR10315835
+prefetch SRR10315836
+prefetch SRR10315837
+prefetch SRR10315838
+```
+
+## Method 2: Using custom script from sra-explorer
+
+There is a convenient [website](https://sra-explorer.info/) that let's you search for all the datasets you want to download and adds them to a shopping cart. Then, this cart will export various methods for download, using formatted urls, bash scripts, and others.
+
+All 4 of the scATAC-seq samples were entered:
+1. SRR10315835
+2. SRR10315836
+3. SRR10315837
+4. SRR10315838
+
+The following bash script was generated to download the fastq files directly. Note: The header was changed for use on the slurm scheduler.
+
+```{bash download files via script}
+#!/bin/sh
+#SBATCH -t 2:00:00
+#SBATCH -J sradownload
+#SBATCH -p build
+#SBATCH -c 1
+#SBATCH -N 1
+#SBATCH -o %x-%j.out
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/035/SRR10315835/SRR10315835.fastq.gz -o SRR10315835_GSM4131776_GBM_4218_Homo_sapiens_ATAC-seq.fastq.gz
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/035/SRR10315835/SRR10315835_1.fastq.gz -o SRR10315835_GSM4131776_GBM_4218_Homo_sapiens_ATAC-seq_1.fastq.gz
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/035/SRR10315835/SRR10315835_2.fastq.gz -o SRR10315835_GSM4131776_GBM_4218_Homo_sapiens_ATAC-seq_2.fastq.gz
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/038/SRR10315838/SRR10315838.fastq.gz -o SRR10315838_GSM4131779_GBM_4349_Homo_sapiens_ATAC-seq.fastq.gz
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/038/SRR10315838/SRR10315838_1.fastq.gz -o SRR10315838_GSM4131779_GBM_4349_Homo_sapiens_ATAC-seq_1.fastq.gz
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/038/SRR10315838/SRR10315838_2.fastq.gz -o SRR10315838_GSM4131779_GBM_4349_Homo_sapiens_ATAC-seq_2.fastq.gz
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/036/SRR10315836/SRR10315836.fastq.gz -o SRR10315836_GSM4131777_GBM_4250_Homo_sapiens_ATAC-seq.fastq.gz
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/036/SRR10315836/SRR10315836_1.fastq.gz -o SRR10315836_GSM4131777_GBM_4250_Homo_sapiens_ATAC-seq_1.fastq.gz
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/036/SRR10315836/SRR10315836_2.fastq.gz -o SRR10315836_GSM4131777_GBM_4250_Homo_sapiens_ATAC-seq_2.fastq.gz
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/037/SRR10315837/SRR10315837.fastq.gz -o SRR10315837_GSM4131778_GBM_4275_Homo_sapiens_ATAC-seq.fastq.gz
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/037/SRR10315837/SRR10315837_1.fastq.gz -o SRR10315837_GSM4131778_GBM_4275_Homo_sapiens_ATAC-seq_1.fastq.gz
+curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR103/037/SRR10315837/SRR10315837_2.fastq.gz -o SRR10315837_GSM4131778_GBM_4275_Homo_sapiens_ATAC-seq_2.fastq.gz
+```
+
+The above was saved as `paul.txt`. 
+Each sample has three files, two of which are the paired end reads denoted with _1 and _2 suffix. 
+The third file is small and can be ignored according to [this biostars post](https://www.biostars.org/p/156909/). They are apparently orphaned reads after trimming.
+
+Also, the build partition has a 2 hr time limit, which might not be enough to download all the files.
+```{bash run script}
+cd ~/SRA
+squeue paul.txt
+```
+
+```{bash copy files over}
+cd /cluster/projects/wouterslab
+mkdir -p scATAC/Guilhamon
+
+cp ~/SRA/*fastq.gz /cluster/projects/wouterslab/scATAC/Guilhamon
+```
+
+# Download Guilhamon data using sratoolkit
+
+```{bash sratoolkit}
+
+```
+
+# Rename fastq for use with Cell Ranger
+
+Cellranger requires the fastq files to follow the naming convention employed by `bcl2fastq`:
+
+[Sample Name]_S1_L00[Lane Number]_[Read Type]_001.fastq.gz
+
+Where Read Type is one of:
+
+I1: Sample index read (optional)
+I2: Sample index read (optional)
+R1: Read 1 (required)
+R2: Read 2 (required)
+
+
+However, the files we download from SRA are not named in that format and require some modification
+# Run cellranger
+
+```{bash cellranger}
+cd /home/jdoe/runs
+cellranger count --id=sample345 \
+           --transcriptome=/opt/refdata-gex-GRCh38-2020-A \
+           --fastqs=/home/jdoe/runs/HAWT7ADXX/outs/fastq_path \
+           --sample=mysample \
+           --localcores=8 \
+           --localmem=64
+
+cd /home/jdoe/runs
+cellranger count --id=sample345 \
+           --transcriptome=/opt/refdata-gex-GRCh38-2020-A \
+           --fastqs=/home/jdoe/runs/HAWT7ADXX/outs/fastq_path \
+           --sample=mysample \
+           --jobmode slurm
+           
+        
+```
+
+Some questions based on the example commands above:
+1. where is the transcriptome reference on the H4h cluster
+
+/cluster/tools/data/commondata/cellranger/refdata-cellranger-atac-GRCh38-1.2.0
+/cluster/tools/data/commondata/cellranger/refdata-gex-GRCh38-2020-A
+
+refdata-gex-GRCh38-2020-A
