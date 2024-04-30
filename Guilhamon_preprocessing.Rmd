@@ -18,11 +18,12 @@ module load sratoolkit/3.0.7
 
 ## Method 1: Using commands from SRA toolkit (prefetch)
 
-The login node for the computing cluster has access to the internet. We can load the SRA toolkit, which is installed on the cluster, and run commands to download the dataset in `.sra` format.
+The login node for the computing cluster has access to the internet. We can load the SRA toolkit module, which is installed on the cluster, and run commands to download the dataset given a SRA accession number. The expected files will be in `.sra` format and other helper files.
 
-The following commands are based on the [documentation](https://github.com/ncbi/sra-tools/wiki/08.-prefetch-and-fasterq-dump).
+For more details on the commands used, see the [documentation](https://github.com/ncbi/sra-tools/wiki/08.-prefetch-and-fasterq-dump).
 
-Note: In my experience, this downloading process is very slow. Direct download may be faster (see method 2). However, if fastq files may need to be built from the SRA file and may differ from the fastq offered from direct download.
+Note:
+The prefetch downloading process is very slow and many users online prefer direct download (see method 2). However, using `prefetch` followed by `fastq-dump` or `fasterq-dump` allowed more flexibility for building the fastq files. For example, the fastq built from the SRA file may differ from the fastq from direct download in terms of their header.
 
 ```{bash download files from SRA}
 # on the login node
@@ -36,7 +37,7 @@ prefetch SRR10315836
 prefetch SRR10315837
 prefetch SRR10315838
 ```
-Note: The size of the .sra file (~4 gb each) may exceed allocations for the login node. Additional files are also downloaded in the folder containing the SRA file.
+Note: The size of the .sra file (~4 gb each) may exceed allocations for the login node. Additional files (small in ziare also downloaded in the folder containing the SRA file.
 > [rwu@h4huhnlogin1 SRA]$ ls SRR10315835/
 CM000663.1  CM000672.1  CM000681.1  GL000194.1  GL000203.1  GL000212.1  GL000221.1  GL000230.1  GL000239.1  GL000248.1
 CM000664.1  CM000673.1  CM000682.1  GL000195.1  GL000204.1  GL000213.1  GL000222.1  GL000231.1  GL000240.1  GL000249.1
@@ -48,29 +49,137 @@ CM000669.1  CM000678.1  GL000191.1  GL000200.1  GL000209.1  GL000218.1  GL000227
 CM000670.1  CM000679.1  GL000192.1  GL000201.1  GL000210.1  GL000219.1  GL000228.1  GL000237.1  GL000246.1
 CM000671.1  CM000680.1  GL000193.1  GL000202.1  GL000211.1  GL000220.1  GL000229.1  GL000238.1  GL000247.1
 
-```{bash extract with fastq-dump}
+```{bash extract with fastq-dump on login node}
+# on login node (internet enabled)
 module load sratoolkit/3.0.7
 
 cd /cluster/home/rwu/SRA
-fastq-dump --split-files --origfmt --defline-seq '@rd.$si:$sg:$sn' SRR10315835/SRR10315835.sra
-```
-Above command from [Not A Rocket Scientist](https://notarocketscientist.xyz/posts/2022-07-26-getting-index-reads-from-sra/). Needs to be done on build partition since you will get a `fail to call services` error if no internet. However, we ran out of space here. 
+fastq-dump --split-files --origfmt --defline-seq '@rd.$si:$sg:$sn' SRR10315835
 
-```{bash extract with fastq-dump without internet}
+```
+Above `fastq-dump` command from [Not A Rocket Scientist](https://notarocketscientist.xyz/posts/2022-07-26-getting-index-reads-from-sra/).
+
+Explanation of flags used:
+1. `--split-files`: Dump each read into separate file. Files will receive suffix corresponding to read number.
+2. `--origfmt`: Defline contains only original sequence name
+3. `--defline-seq` '@rd.$si:$sg:$sn' : Defline format specification for sequence.
+  + where $si is spot id, $sg is spot group, $sn is spot name
+  
+See this [Edward's lab blog](https://edwards.flinders.edu.au/fastq-dump/) for even more descriptions.
+
+Needs to be done on build partition since you will get a `fail to call services` error if no internet. However, we ran out of space here, so the prefetched `SRR10315835` folder was moved to the compute node. See below for attempt on compute node (after disabling internet).
+
+```{bash extract with fastq-dump on compute node (without internet)}
 module load sratoolkit/3.0.7
+
+# run vdb-config interactively and disable remote access (internet)
+vdb-config -i
+
 cd /cluster/projects/wouterslab/scATAC/Guilhamon/SRA
 
+# added flags for output directory and verbose
 fastq-dump --split-files --origfmt --defline-seq '@rd.$si:$sg:$sn' SRR10315835 -v --outdir fastq/
-
 cd fastq
-
+ls -ltrh
 ```
+
 > [rwu@node124 fastq]$ ls -ltrh
 total 60G
 -rw-r--r-- 1 rwu wouterslab 25G Mar 11 18:15 SRR10315835_1.fastq
 -rw-r--r-- 1 rwu wouterslab 25G Mar 11 18:15 SRR10315835_2.fastq
+> rd.1:CTTTCCTT:1
+GGGTTAGGGTTAGGGTTAGGGTTAGGGTTAGGGTTAGGGTTAGGGTTATG
++1
+AAAAA/EAA/A/////EEA//EEE6A/EEEA//AAEA//EEE///EEE//
+[rwu@node116 fastq]$ cat GBM_4218_S1_L001_R2_001.fastq | head -n 4
+@rd.1:CTTTCCTT:1
+AACCCTAACACTAAACATAAACCAAAACCTAAAACTAACAATAAACCTAA
++1
+AA/A//EE//E/EA///EEE/<A/AE/EE//E//E/EEA//6/E//<//E
 
-The ~4.0G .sra file turned into 2 fastq at 50G total.
+The reads from read1 and read2 are 50 bp as expected.
+
+> [rwu@node116 fastq]$ awk 'NR%4==1' GBM_4218_S1_L001_R2_001.fastq | head -5
+@rd.1:CTTTCCTT:1
+@rd.2:ACCAGTCC:2
+@rd.3:TAGGTAAA:3
+@rd.4:GGACAGGG:4
+@rd.5:TAGGTAAA:5
+
+These look like i7 8 bp sample index. 
+
+The ~4.0G .sra file turned into 2 fastq at 50G total. When compared to the direct download of fastq (method 2), this is significantly larger but here only has 2 files vs 3 fastq.gz files.
+
+```{bash edward's lab commands}
+# Try commands from Edwards's lab (from 2015):
+# fastq-dump --gzip --skip-technical  --readids --dumpbase --split-files --clip SRR10315835
+
+# Try commands from Edwards's lab (from 2020):
+fastq-dump --outdir fastq --skip-technical  --readids --read-filter pass --dumpbase --clip --split-3 SRR10315835
+# Rejected 367 READS because of filtering out non-biological READS
+# Read 187230591 spots for SRR10315835
+# Written 80107509 spots for SRR10315835
+```
+>
+[rwu@node131 fastq]$ pwd
+/cluster/projects/wouterslab/scATAC/Guilhamon/SRA/fastq
+[rwu@node131 fastq]$ ls -ltrh
+total 34G
+-rw-r--r-- 1 rwu wouterslab 14G Mar 13 10:09 SRR10315835_pass_1.fastq
+-rw-r--r-- 1 rwu wouterslab 14G Mar 13 10:09 SRR10315835_pass_2.fastq
+-rw-r--r-- 1 rwu wouterslab 55K Mar 13 10:09 SRR10315835_pass.fastq
+[rwu@node131 fastq]$ head SRR10315835_pass_1.fastq
+@SRR10315835.1.1 1 length=50
+GGGTTAGGGTTAGGGTTAGGGTTAGGGTTAGGGTTAGGGTTAGGGTTATG
++SRR10315835.1.1 1 length=50
+AAAAA/EAA/A/////EEA//EEE6A/EEEA//AAEA//EEE///EEE//
+@SRR10315835.4.1 4 length=50
+AACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAC
++SRR10315835.4.1 4 length=50
+AAAAAEEAEEEAEAEEEEEEEEEEE6EE//EE//EE66A/EAE//E/A//
+@SRR10315835.6.1 6 length=46
+AACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACC
+[rwu@node131 fastq]$ head SRR10315835_pass_2.fastq
+@SRR10315835.1.2 1 length=50
+AACCCTAACACTAAACATAAACCAAAACCTAAAACTAACAATAAACCTAA
++SRR10315835.1.2 1 length=50
+AA/A//EE//E/EA///EEE/<A/AE/EE//E//E/EEA//6/E//<//E
+@SRR10315835.4.2 4 length=50
+GGGTTAGGGTTAGGGTTAGGGTTAGGGTTAGGGTTAGGGTTAGGGTTATG
++SRR10315835.4.2 4 length=50
+AAAAA6EEEEE6EEEEEEEEAEE6AEAAEAEA/EAE/E/EEE/E//EE/<
+@SRR10315835.6.2 6 length=50
+GGTTAGGGTTAGGGTTAGTGTTAGGGATAGGGTAAGGGTTAGGGTTATGT
+[rwu@node131 fastq]$ head SRR10315835_pass.fastq
+@SRR10315835.187230225.2 187230225 length=26
+GGCTCGGAGATGTGTATAAGAGACAG
++SRR10315835.187230225.2 187230225 length=26
+AAAAAEEEEEEEAEEEAEEEEEEEEE
+@SRR10315835.187230226.1 187230226 length=23
+CGTCAGATGTGTATAAGAGACAG
++SRR10315835.187230226.1 187230226 length=23
+AAAA6E6EEEEE6EEEE6E6E//
+@SRR10315835.187230227.2 187230227 length=50
+CTGTATCTAATACACATATGAAGCTGCCGACCATCATACACTGTCCCAGA
+
+
+Next, let's rename the fastq so they are in `bcl2fastq` format for use with cellranger-atac as mentioned on the 10x website:
+
+[Sample Name]_S1_L00[Lane Number]_[Read Type]_001.fastq.gz
+
+Where Read Type is one of:
+
+I1: Dual index i7 read (optional)
+R1: Read 1
+R2: Dual index i5 read
+R3: Read 2
+
+Alternatively, Cell Ranger ATAC will also accept ATAC FASTQs in this format:
+
+I1: Dual index i7 read (optional)
+R1: Read 1
+I2: Dual index i5 read
+R2: Read 2
 
 ```{bash rename and run cellranger-atac}
 cd /cluster/projects/wouterslab/scATAC/Guilhamon/SRA/fastq
@@ -82,18 +191,38 @@ sbatch ~/scripts/cellranger-atac-count.sh \
 GBM_4218 \
 fastq/
 ```
+We got an error:
+> 
+Unable to read barcode sequence for read ID rd.1:CTTTCCTT:1: there was no I2 read FASTQ and we were unable to read a 16-base barcode from the FASTQ header. Make sure that the flow cell was demultiplexed correctly.
+Waiting 6 seconds for UI to do final refresh.
+Pipestance failed. Use --noexit option to keep UI running after failure. 
+2024-03-12 00:31:42 Shutting down.
 
+Looks like they are looking for a 16-base barcode.
+
+## Method 1b: fasterq-dump
 ```{bash extract with fasterq-dump}
 module load sratoolkit/3.0.7
 cd /cluster/projects/wouterslab/scATAC/Guilhamon/SRA
 
-fasterq-dump --split-files --include-technical SRR10315835 --outdir fastq
-fasterq-dump --split-files --include-technical SRR10315835 --outdir fastq --verbose
+#fasterq-dump --split-files --include-technical SRR10315835 --outdir fastq2
+fasterq-dump --split-files --include-technical SRR10315835 --outdir fastq2 --verbose
+
+# try --split-3 flag
+fasterq-dump --split-3 --include-technical SRR10315835 --outdir fastq2 --verbose
+
+# try another accession
+fasterq-dump --split-files --include-technical SRR10315836 --outdir fastq2 --verbose
+fasterq-dump --split-files --skip-technical SRR10315836 --outdir fastq2 --verbose
+
 ```
 Instructions for fasterq-dump can be found [here](https://github.com/ncbi/sra-tools/wiki/HowTo:-fasterq-dump).
 fasterq-dump is faster than fastq-dump, but the syntax is a bit different. Can also use without internet if specified using `vdb-config -i`. 
 
-Problem: No fastq files were made in the fastq/ outdir. Only `fasterq-tmp` folder was generated with `.dat` files. Usually this temp folder is removed and fastq is generated. Didn't see any errors when we ran the command with `--verbose`.
+Ran very fast compared to `fastq-dump`, but problems:
+1. No fastq files were made in the fastq2/ outdir with either `--split-files` or `--split-3` flag.
+2. The `fasterq-tmp` folder was generated with `.dat` files but was not removed. Usually this temp folder is removed and fastq is generated. 
+3. Didn't see any errors when we ran the command with `--verbose`.
 
 ## Bare accession needs internet
 ```{bash fasterq-dump SRR000001}
@@ -274,4 +403,43 @@ mv SRR10315835_GSM4131776_GBM_4218_Homo_sapiens_ATAC-seq.fastq.gz fastq/GBM_4218
 mv SRR10315835_GSM4131776_GBM_4218_Homo_sapiens_ATAC-seq.fastq.gz GBM_4218_S1_L001_R2_001.fastq.gz
 ```
 
+```{bash aws policy}
+ssh h4huhndata1
+# Change $PATH  
+export PATH=/cluster/tools/software/centos7/aws:$PATH
 
+aws s3api put-bucket-policy --bucket your-bucket-name --policy file://policy.json
+
+aws s3api put-bucket-policy --bucket woutersgroup-hpc-resgen --policy aws/SRR10315835_policy.json
+
+aws s3api put-bucket-policy --endpoint-url=https://ecs.uhn.ca/ --bucket woutersgroup-hpc-resgen --policy file://SRR10315835_policy.json
+ 
+woutersgroup-hpc-resgen
+```
+error:
+An error occurred (InvalidBucketPolicy) when calling the PutBucketPolicy operation: Invalid principal in policy: 'arn:aws:iam::184059545989:role/NCBI-CSVM-Service
+ Please check the statement: {"Action":"s3:*","Resource":["arn:aws:s3:::ecs.uhn.ca\/woutersgroup-hpc-resgen","arn:aws:s3:::ecs.uhn.ca\/woutersgroup-hpc-resgen\/*"],"Effect":"Allow","Principal":{"AWS":["arn:aws:iam::184059545989:role\/NCBI-CSVM-Service","arn:aws:iam::783971887864:role\/NCBI-CSVM-Service"]},"Sid":"NCBIDataDeliveryAccess"}
+ 
+```{json SRR10315835_policy.json}
+{
+  "Id": "Policy1710337213328",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "NCBIDataDeliveryAccess",
+      "Action": "s3:*",
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:s3:::woutersgroup-hpc-resgen",
+        "arn:aws:s3:::woutersgroup-hpc-resgen/*"
+      ],
+      "Principal": {
+        "AWS": [
+          "arn:aws:iam::184059545989:role/NCBI-CSVM-Service",
+          "arn:aws:iam::783971887864:role/NCBI-CSVM-Service"
+        ]
+      }
+    }
+  ]
+}
+```
