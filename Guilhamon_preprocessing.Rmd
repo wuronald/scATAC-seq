@@ -166,9 +166,15 @@ CTGTATCTAATACACATATGAAGCTGCCGACCATCATACACTGTCCCAGA
 Next, let's rename the fastq so they are in `bcl2fastq` format for use with cellranger-atac as mentioned on the 10x website:
 
 [Sample Name]_S1_L00[Lane Number]_[Read Type]_001.fastq.gz
+<<<<<<< HEAD
 
 Where Read Type is one of:
 
+=======
+
+Where Read Type is one of:
+
+>>>>>>> e1740f9b061399bf9fd7eb853883895c292b9c7a
 I1: Dual index i7 read (optional)
 R1: Read 1
 R2: Dual index i5 read
@@ -402,3 +408,47 @@ mv GBM_4218_S1_L001_R2_001.fastq.gz GBM_4218_S1_L001_R3_001.fastq.gz
 mv SRR10315835_GSM4131776_GBM_4218_Homo_sapiens_ATAC-seq.fastq.gz fastq/GBM_4218
 mv SRR10315835_GSM4131776_GBM_4218_Homo_sapiens_ATAC-seq.fastq.gz GBM_4218_S1_L001_R2_001.fastq.gz
 ```
+<<<<<<< HEAD
+=======
+
+```{bash aws policy}
+ssh h4huhndata1
+# Change $PATH  
+export PATH=/cluster/tools/software/centos7/aws:$PATH
+
+aws s3api put-bucket-policy --bucket your-bucket-name --policy file://policy.json
+
+aws s3api put-bucket-policy --bucket woutersgroup-hpc-resgen --policy aws/SRR10315835_policy.json
+
+aws s3api put-bucket-policy --endpoint-url=https://ecs.uhn.ca/ --bucket woutersgroup-hpc-resgen --policy file://SRR10315835_policy.json
+ 
+woutersgroup-hpc-resgen
+```
+error:
+An error occurred (InvalidBucketPolicy) when calling the PutBucketPolicy operation: Invalid principal in policy: 'arn:aws:iam::184059545989:role/NCBI-CSVM-Service
+ Please check the statement: {"Action":"s3:*","Resource":["arn:aws:s3:::ecs.uhn.ca\/woutersgroup-hpc-resgen","arn:aws:s3:::ecs.uhn.ca\/woutersgroup-hpc-resgen\/*"],"Effect":"Allow","Principal":{"AWS":["arn:aws:iam::184059545989:role\/NCBI-CSVM-Service","arn:aws:iam::783971887864:role\/NCBI-CSVM-Service"]},"Sid":"NCBIDataDeliveryAccess"}
+ 
+```{json SRR10315835_policy.json}
+{
+  "Id": "Policy1710337213328",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "NCBIDataDeliveryAccess",
+      "Action": "s3:*",
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:s3:::woutersgroup-hpc-resgen",
+        "arn:aws:s3:::woutersgroup-hpc-resgen/*"
+      ],
+      "Principal": {
+        "AWS": [
+          "arn:aws:iam::184059545989:role/NCBI-CSVM-Service",
+          "arn:aws:iam::783971887864:role/NCBI-CSVM-Service"
+        ]
+      }
+    }
+  ]
+}
+```
+>>>>>>> e1740f9b061399bf9fd7eb853883895c292b9c7a
