@@ -1,0 +1,175 @@
+---
+title: "ArchR_1.0.3_H4H_installation"
+author: "Ronald Wu"
+date: '2025-03-31'
+output: html_document
+---
+
+# Introduction
+This document describes the installation of ArchR 1.0.3 on the H4H cluster. The installation is based on the renv lock file provided by the ArchR team, which is compatible with R 4.4. 
+On the H4H cluster, the R version is R 4.4.1, which is not exactly the R/4.4 that is expected from the lock file, however, we will test if this is still okay.
+
+We previously installed Arch 1.0.2 on the cluster and became stuck at the macs peak calling. Hopefully, this has been resolved.
+##  Cluster commands
+```{bash cluster commands}
+module load R/4.4.1
+module load R/4.1.0
+R
+```
+
+
+## install renv
+Here we install renv on the cluster in our personal library. The precompiled renv lock file will be used to manage dependencies.
+```{R install renv}
+install.packages("renv")
+# personal library: ‘/cluster/home/rwu/R/x86_64-conda-linux-gnu-library/4.4’
+```
+
+##  Install ArchR 1.0.3 on H4H using precompiled renv to manage dependencies
+```{r install ArchR, eval = FALSE}
+library(renv)
+dir.create(path = "./ArchR103", showWarnings = FALSE)
+setwd("./ArchR103") # for 4.1.0
+
+# download ArchR renv lock file for R 4.1.0
+download.file(url = "https://pub-9ae435458ecc412abbbc9420a502ec38.r2.dev/renv_4_1.lock", destfile = "./renv.lock")
+
+# restore the project from the lock file
+## this will take a while to download and install
+renv::init()
+```
+
+```{r install ArchR, eval = FALSE}
+library(renv)
+dir.create(path = "./ArchR103_4", showWarnings = FALSE)
+setwd("./ArchR103_4") # for 4.4.1
+
+# download ArchR renv lock file for R 4.4.1
+download.file(url = "https://pub-9ae435458ecc412abbbc9420a502ec38.r2.dev/renv.lock", destfile = "./renv.lock")
+
+# restore the project from the lock file
+## this will take a while to download and install
+renv::init()
+```
+
+# custom renv::install("XML")
+Since we got error messages about the XML package during renv::init(), we will install the XML package manually.
+
+```{r custom renv::install("XML"), eval = FALSE}
+renv::install("XML") # These packages will be installed into "~/R/x86_64-conda-linux-gnu-library/4.4".
+renv::install("gert") # gert 2.1.5 will be installed
+renv::install("sf")
+```
+
+# install units; 
+
+Had to use conda to install udunits2, which is a dependency for the units package. For some reason, renv could not access the udunits2 library, even though it was installed in the /usr/lib64, and the 
+header was found in the /usr/include/udunits2 dir.
+## install udunits2 with conda first
+```{bash conda install udunits2}
+# Create a new conda environment in your home directory
+conda create -p ~/myenv
+# Activate the new environment
+conda activate ~/myenv
+# Install udunits2 in your personal environment
+conda install -c conda-forge udunits2
+
+```
+
+```{r install units}
+config <- c(units="--with-udunits2-lib=/cluster/home/rwu/myenv/lib --with-udunits2-include=/cluster/home/rwu/myenv/include")
+options(configure.args=config)
+renv::install("units")
+```
+
+# Install libxml2
+```{bash libxml2 installation}
+wget https://gitlab.gnome.org/GNOME/libxml2/-/archive/v2.14.0/libxml2-v2.14.0.tar.gz
+
+tar -xvzf libxml2-v2.14.0.tar.gz
+cd libxml2-v2.14.0
+./configure --prefix=/cluster/home/rwu/bin/libxml2-v2.14.0 --disable-static --with-history
+
+
+./configure --prefix=$HOME/.local --with-python=/usr/bin/python3.9
+
+```
+
+# Install sf dependencies
+Claude thinks we can't find libproj.so.22 based on the error messages after running renv::init().
+
+```{bash sf dependencies}
+# install sf dependencies
+conda install -c conda-forge gdal geos proj
+```
+
+Double check if R can find these files.
+```{bash sf dependencies}
+conda activate ~/myenv
+conda list -p $CONDA_PREFIX proj
+conda list -p $CONDA_PREFIX gdal
+conda list -p $CONDA_PREFIX geos
+
+find $CONDA_PREFIX -type f -name "*.so*" | grep proj 
+#/cluster/home/rwu/myenv/lib/libproj.so.25.9.6.0
+
+# tell R where to find libraries and other environment variables
+export LD_LIBRARY_PATH=/cluster/home/rwu/myenv/lib:$LD_LIBRARY_PATH
+export PROJ_LIB=/cluster/home/rwu/myenv/share/proj
+export PKG_CONFIG_PATH=/cluster/home/rwu/myenv/lib/pkgconfig:$PKG_CONFIG_PATH
+```
+# packages in environment at /cluster/tools/software/rocky9/R/4.4.1:
+#
+# Name                    Version                   Build  Channel
+proj                      9.6.0                h0054346_0    conda-forge
+gdal                      3.10.2          py313h49478cc_5    conda-forge
+libgdal-core              3.10.2               hae73b24_5    conda-forge
+geos                      3.13.1               h97f6797_0    conda-forge
+
+```{r try sf install now}
+Sys.setenv(LD_LIBRARY_PATH = paste0("/cluster/home/rwu/myenv/lib:", Sys.getenv("LD_LIBRARY_PATH")))
+Sys.setenv(PROJ_LIB = "/cluster/home/rwu/myenv/share/proj")
+Sys.setenv(PKG_CONFIG_PATH = paste0("/cluster/home/rwu/myenv/lib/pkgconfig:", Sys.getenv("PKG_CONFIG_PATH")))
+
+renv::install("sf", configure.args = "--with-proj-lib=/cluster/home/rwu/myenv/lib --with-proj-include=/cluster/home/rwu/myenv/include")
+```
+
+# Install ArchR
+Here we will install ArchR after loading and running a R session in the ArchR103_4 directory. The renv environment will be loaded first, since we previously initialized it.
+
+```{r install ArchR}
+# in build node (with internet connection)
+library(devtools)
+library(BiocManager)
+devtools::install_github("GreenleafLab/ArchR", ref="master", repos = BiocManager::repositories())
+```
+# Loading ArchR
+```{bash init first time}
+# navigate to working directory
+cd ArchR103_4
+module load R/4.4.1
+
+# `r studio` will not work, so we have to use R in the terminal
+# load renv and ArchR
+library(renv)
+renv::init()
+library(BiocManager) # note warning about no internet connection
+renv::init()
+library(ArchR)
+
+path.package("ArchR") # "/cluster/home/rwu/ArchR103_4/renv/library/linux-rocky-9.4/R-4.4/x86_64-conda-linux-gnu/ArchR"
+```
+
+
+# libflexiblas.so.3.0.0 error
+Got an error when loading ArchR, one of the matrix package dependencies cannot be found. 
+libflexiblas.so.3: cannot open shared object file:
+```{r libflexiblas.so.3.0.0 error}
+# just install the R package
+renv:install("flexiblas")
+
+conda install -c conda-forge openblas
+```
+
+cluster/home/rwu/myenv/lib/libopenblas.so
+/cluster/home/rwu/myenv/lib/libopenblas.so.0

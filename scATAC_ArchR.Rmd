@@ -1,0 +1,103 @@
+---
+title: "scATAC_ArchR"
+author: "Ronald Wu"
+date: '2024-05-01'
+output: html_document
+---
+
+# Single Cell ATAC-seq Analysis
+There are a few well known packages in R and python that can be used to analyze scATAC-seq data.
++ R Packages:
+  + Signac: developed by Tim Stuart while in the Satija lab. Actively maintained by Stuart lab.
+    + [website](https://stuartlab.org/signac/)
+  + ArchR: 
+    + [website](https://www.archrproject.com/)
+
+# ArchR Vignettes
+The purpose of this notebook is to learn how to use `ArchR` for processing and analyzing scATAC-seq data. We'll be following the vignettes provided by the Greenleaf lab, which is the original developer of this package. All code is slightly modified from their original vignettes from the following:
++ [brief tutorial](https://www.archrproject.com/articles/Articles/tutorial.html)
++ 
+
+# Setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Install packages
+
+```{r install packages}
+# install devtools: allows install of packages from github
+if (!requireNamespace("devtools", quietly = TRUE)) install.packages("devtools")
+
+# if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+
+devtools::install_github("GreenleafLab/ArchR", ref="master", repos = BiocManager::repositories())
+
+library(ArchR)
+ArchR::installExtraPackages() # installs Cairo and other stuff
+
+ library(BiocManager)
+      install("BSgenome.Hsapiens.UCSC.hg19") # needed to set addArchRGenome to hg19
+```
+
+I also installed `macs2` version 2.2.9.1 locally (on macbook pro) using the command `pip install macs2`. MACS2 will be called by ArchR for peak calling purposes. Note: There is a newer versions of MACS called `MACS3` but I don't believe is it support by ArchR.
+
+# Load Libraries
+```{r load libraries}
+library(ArchR) # version 1.0.2
+```
+
+# 1. Brief tutorial
+
+## Setup and download tutorial data
+Below we are following the [brief tutorial](https://www.archrproject.com/articles/Articles/tutorial.html).
+
+```{r Setup and download tutorial data, eval = FALSE}
+library(ArchR)
+set.seed(1)
+addArchRThreads(threads = 2) 
+
+# download tutorial data (0.5 gigs to current working directory)
+inputFiles <- getTutorialData("Hematopoiesis")
+
+# change location of tutorial files to data/
+temp <- names(inputFiles)
+inputFiles <- paste0("data/", inputFiles)
+names(inputFiles) <- temp
+```
+After downloading the tutorial files, we manually moved them to the `data/` folder in the current working directory.
+
+## Creating Arrow Files
+
+```{r creating arrow files}
+# set genome to hg19
+addArchRGenome("hg19")
+
+# create arrow files
+ArrowFiles <- createArrowFiles(
+  inputFiles = inputFiles[1],
+  sampleNames = names(inputFiles)[1],
+  minTSS = 4, # Dont set this too high because you can always increase later
+  minFrags = 1000, 
+  addTileMat = TRUE,
+  addGeneScoreMat = TRUE
+)
+
+ArrowFiles
+```
+Note: we modified the above tutorial code to process only 1 of 3 samples. Had an error when all 3 inputFiles were used.
+
+When only the first sample `scATAC_BMMC_R1` was used, arrow file was created without error. Still took 32 mins to complete.
+
+## Inferring doublets
+
+```{r inferring doublets}
+doubScores <- addDoubletScores(
+  input = ArrowFiles,
+  k = 10, #Refers to how many cells near a "pseudo-doublet" to count.
+  knnMethod = "UMAP", #Refers to the embedding to use for nearest neighbor search.
+  LSIMethod = 1,
+  outDir = "~/QualityControl"
+)
+```
