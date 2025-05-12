@@ -10,15 +10,16 @@
 #SBATCH --time=04:00:00
 
 # Load necessary modules (adjust as needed for your system)
-module load R/4.2.1
+module load R/4.4.1
 
 # Run R script
 Rscript - <<EOF
 
 # load libraries
 library(ArchR)
-library(ggrastr)
+library(BSgenome.Hsapiens.UCSC.hg38)
 library(Seurat)
+library(here)
 set.seed(1)
 
 # Set the number of threads for ArchR
@@ -111,7 +112,7 @@ u5 <- plotEmbedding(ArchRProj = proj,
                     embedding = "UMAP"
                     )
 ## save PDF of UMAPs
-
+print("save pdf")
 plotPDF(u1,u2,u3,u4,u5,
         name = "Terekhanova-all-Plot-UMAP-Sample-HarmonyClusters.pdf", 
         ArchRProj = proj, 
@@ -119,8 +120,8 @@ plotPDF(u1,u2,u3,u4,u5,
         width = 5, height = 5)
 
 # Save the project
+print("Saving Project")
 saveArchRProject(ArchRProj = proj, outputDirectory = "Terekhanova", load = TRUE)
-
 EOF
 
 echo "ArchR analysis completed"
