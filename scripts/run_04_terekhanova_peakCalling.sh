@@ -11,8 +11,8 @@
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
-#module load python3/3.7.2
-module load MACS/2.2.5
+module load python3/3.7.2
+module load MACS/2.2.7.1
 
 # Run R script
 Rscript - <<'EOF'
@@ -72,18 +72,16 @@ proj_hyp2 <- addReproduciblePeakSet(ArchRProj = proj_hyp,
 #     method = "p"
 # )
 
-# Save the project
-proj_hyp2 <- saveArchRProject(ArchRProj = proj_hyp2, outputDirectory = "Terekhanova_hypoxia", load = TRUE)
-print(paste0("current output dir:",getOutputDirectory(proj_hyp2)))
-
 print("get Peaks set")
 # get the peak set
 myPeakSet <- getPeakSet(proj_hyp2)
 
 # tabulate type of peaks
+print("tabulate type of peaks")
 table(myPeakSet$peakType)
 
 # check available matrices
+print("check available matrices")
 getAvailableMatrices(proj_hyp2)
 
 # add peak Matrix
@@ -94,6 +92,7 @@ proj_hyp2 <- addPeakMatrix(proj_hyp2)
 getAvailableMatrices(proj_hyp2)
 
 # fix incompatible dimensions error (change factor back to logical)
+print("fix incompatible dimensions error")
 proj_hyp2$DAEG_UP_24 <- as.logical(proj_hyp2$DAEG_UP_24)
 
 # get marker peaks for DAEG_UP_24 groups
@@ -109,6 +108,11 @@ markersPeaks_DAEG_UP_24 <- getMarkerFeatures(
 
 # save the markersPeaks SE object for easier load in the future
 save(markersPeaks_DAEG_UP_24, file = "Terekhanova_hypoxia/PeakCalls/markersPeaks_DAEG_UP_24.RData")
+
+# Save the project
+print("Saving the project")
+proj_hyp2 <- saveArchRProject(ArchRProj = proj_hyp2, outputDirectory = "Terekhanova_hypoxia", load = TRUE)
+print(paste0("current output dir:",getOutputDirectory(proj_hyp2)))
 
 EOF
 
