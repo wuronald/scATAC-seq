@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
 #SBATCH --mem=60G
-#SBATCH --time=02:00:00
+#SBATCH --time=04:00:00
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
@@ -85,7 +85,7 @@ ArrowFiles <- createArrowFiles(
 
 # vector of paths to all 3 samples
 ArrowFiles <- c("SM122_BR4.arrow","SM222_AR1.arrow","SM222_GL1.arrow")
-print("Starting add doubletscores")
+
 print(ArrowFiles)
 
 
@@ -96,7 +96,7 @@ projMulti1 <- ArchRProject(
 )
 
 # show available matrices for the project 
-getAvailableMatrices(proj) #  "GeneScoreMatrix" "TileMatrix" 
+getAvailableMatrices(projMulti1) #  "GeneScoreMatrix" "TileMatrix" 
 
 
 # import rna data
@@ -123,7 +123,7 @@ projMulti2 <- addGeneExpressionMatrix(input = projMulti2, seRNA = seRNA, strictM
 # filter doublets; note addDoubletScores must be run previously
 ## Default filterRatio = 1; this is a consistent filter applied on all samples
 ## Can be adjusted to filter more cells
-print("Starting filterDoublets")
+print("Starting adddoubletscores and filterDoublets")
 projMulti2 <- addDoubletScores(projMulti2, force = TRUE)
 projMulti2 <- filterDoublets(ArchRProj = projMulti2)
 
