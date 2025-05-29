@@ -109,8 +109,25 @@ markersPeaks_DAEG_UP_24 <- getMarkerFeatures(
 # save the markersPeaks SE object for easier load in the future
 save(markersPeaks_DAEG_UP_24, file = "Terekhanova_hypoxia/PeakCalls/markersPeaks_DAEG_UP_24.RData")
 
+# correct groupCoverages paths
+print("output groupCoverages paths:")
+print(proj_hyp2@projectMetadata$GroupCoverages[[1]]$coverageMetadata$File)
+
+my_dir <- "/cluster/projects/wouterslab/ArchR103_4/Terekhanova_hypoxia"
+old_project_dir <- "/cluster/projects/wouterslab/ArchR103_4/Terekhanova"
+# old_paths <- proj_hyp2@projectMetadata@listData[["GroupCoverages"]][["coverageMetadata"]]$File
+old_paths <- proj_hyp2@projectMetadata$GroupCoverages[[1]]$coverageMetadata$File
+new_paths <- gsub(old_project_dir, my_dir, old_paths)
+proj_hyp2@projectMetadata$GroupCoverages[[1]]$coverageMetadata$File <- new_paths
+
+print("new groupCoverages paths:")
+print(new_paths)
+print("confirm assignment of new paths:")
+print(proj_hyp2@projectMetadata$GroupCoverages[[1]]$coverageMetadata$File)
+
 # Save the project
 print("Saving the project")
+
 proj_hyp2 <- saveArchRProject(ArchRProj = proj_hyp2, outputDirectory = "Terekhanova_hypoxia", load = TRUE)
 print(paste0("current output dir:",getOutputDirectory(proj_hyp2)))
 
