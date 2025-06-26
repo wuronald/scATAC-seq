@@ -40,3 +40,5 @@ results/
 # log files
 ArchRLogs/
 .log
+# PDF
+.pdf
