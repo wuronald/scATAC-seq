@@ -41,4 +41,4 @@ results/
 ArchRLogs/
 .log
 # PDF
-.pdf
+*.pdf
