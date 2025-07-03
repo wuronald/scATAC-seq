@@ -13,7 +13,7 @@
 module load R/4.4.1
 
 # Run R script
-Rscript - <<EOF
+Rscript - <<'EOF'
 
 # load libraries
 library(ArchR)
@@ -96,7 +96,7 @@ for (i in seq_along(proj@reducedDims)) {
         ArchRProj = proj, 
         reducedDims = names(proj@reducedDims)[i], 
         name = paste0("UMAP_", names(proj@reducedDims)[i]), 
-        nNeighbors = 30, 
+        nNeighbors = 40, 
         minDist = 0.5, 
         metric = "cosine"
     )
@@ -140,18 +140,20 @@ print(names(proj@cellColData))
 
 # plot by harmony clusters for each reducedDims
 for (i in seq_along(new_embeddings)) {
-    print(paste("Plotting UMAP for embedding:", new_embeddings[i]), "with Clusters_harmony as colorBy")
+    for (j in seq_along(original_reducedDims)) {
+    print(paste("Plotting UMAP for embedding:", new_embeddings[i], "with Clusters_harmony as colorBy ", original_reducedDims[j]))
     u <- plotEmbedding(ArchRProj = proj, 
                        colorBy = "cellColData", 
-                       name = paste0("Clusters_harmony_", original_reducedDims[i]),
+                       name = paste0("Clusters_harmony_", original_reducedDims[j]),
                        embedding = new_embeddings[i]
                        )
     # save each plot
     plotPDF(u, 
-            name = paste0("Harmony-Plot-UMAP-Clusters_harmony-", new_embeddings[i], ".pdf"), 
+            name = paste0("Harmony-Plot-UMAP-Clusters_harmony-", new_embeddings[i], original_reducedDims[j],".pdf"), 
             ArchRProj = proj, 
             addDOC = TRUE, # adds date of creation to end of filename
             width = 5, height = 5)
+            }
 }
 
 # Save the project
