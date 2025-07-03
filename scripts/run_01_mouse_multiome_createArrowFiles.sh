@@ -58,10 +58,11 @@ rnaFiles <- list.files(
 
 # Extract sample names from file paths
 sampleNames <- basename(dirname(atacFiles))
+sampleNames2 <- basename(dirname(rnaFiles))
 
 # Name the files with sample names
 names(atacFiles) <- sampleNames
-names(rnaFiles) <- sampleNames
+names(rnaFiles) <- sampleNames2
 
 # Set genome to mm10 (mouse genome)
 addArchRGenome("mm10")
@@ -83,11 +84,11 @@ ArrowFiles <- createArrowFiles(
   addGeneScoreMat = TRUE
 )
 
-# vector of paths to all 3 samples
-ArrowFiles <- c("SM122_BR4.arrow","SM222_AR1.arrow","SM222_GL1.arrow")
+# Uncomment the following line if you want to use specific Arrow files
+# ArrowFiles <- c("SM122_BR4.arrow","SM222_AR1.arrow","SM222_GL1.arrow")
 
+print("Creating ArchRProject Project with the following arrowFiles:")
 print(ArrowFiles)
-
 
 projMulti1 <- ArchRProject(
   ArrowFiles = ArrowFiles, 
@@ -130,7 +131,5 @@ projMulti2 <- filterDoublets(ArchRProj = projMulti2)
 # Save the project
 print("Saving the project")
 saveArchRProject(ArchRProj = projMulti2, outputDirectory = "mouse_multiome", load = TRUE)
-
 EOF
-
 echo "ArchR analysis completed"
