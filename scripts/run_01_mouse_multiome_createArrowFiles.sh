@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
 #SBATCH --mem=60G
-#SBATCH --time=01:00:00
+#SBATCH --time=03:00:00
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
@@ -132,4 +132,5 @@ projMulti2 <- filterDoublets(ArchRProj = projMulti2)
 print("Saving the project")
 saveArchRProject(ArchRProj = projMulti2, outputDirectory = "mouse_multiome", load = TRUE)
 EOF
+
 echo "ArchR analysis completed"

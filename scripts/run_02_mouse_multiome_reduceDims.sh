@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
 #SBATCH --mem=60G
-#SBATCH --time=01:00:00
+#SBATCH --time=02:00:00
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
@@ -17,7 +17,7 @@ Rscript - <<'EOF'
 
 # load libraries
 library(ArchR)
-library(BSgenome.Hsapiens.UCSC.hg38)
+library(BSgenome.Mmusculus.UCSC.mm10)
 library(Seurat)
 library(here)
 set.seed(1)
@@ -64,6 +64,44 @@ projMulti2 <- addIterativeLSI(
   name = "LSI_RNA",
   force = TRUE
 )
+# check dimensions:
+print("Dimensions of LSI_ATAC:")
+print(dim(projMulti2@reducedDims$LSI_ATAC$matSVD))
+print("Dimensions of LSI_RNA:")
+print(dim(projMulti2@reducedDims$LSI_RNA$matSVD))
+
+# Check which cells are present in each modality
+atac_cells <- rownames(projMulti2@reducedDims$LSI_ATAC$matSVD)
+rna_cells <- rownames(projMulti2@reducedDims$LSI_RNA$matSVD)
+
+# Find missing cells
+missing_in_rna <- setdiff(atac_cells, rna_cells)
+missing_in_atac <- setdiff(rna_cells, atac_cells)
+
+print(paste("Cells missing in RNA:", length(missing_in_rna)))
+print(paste("Cells missing in ATAC:", length(missing_in_atac)))
+
+# Find cells that are present in BOTH modalities
+common_cells <- intersect(atac_cells, rna_cells)
+print(paste("Cells present in both modalities:", length(common_cells)))
+
+# Get all cell names from the ArchRProject
+all_cells <- getCellNames(projMulti2)
+
+# Create logical vector for subsetting - keep only cells present in both modalities
+cells_to_keep <- all_cells %in% common_cells
+
+# Subset the ArchRProject to keep only cells with both ATAC and RNA data
+# projMulti2_filtered <- projMulti2[cells_to_keep]
+projMulti2 <- subsetArchRProject(ArchRProj = projMulti2, cells = getCellNames(projMulti2)[cells_to_keep], outputDirectory = "mouse_multiome", force = TRUE)
+
+# Verify the dimensions after filtering
+print("Dimensions after filtering:")
+print("LSI_ATAC dimensions:")
+print(dim(projMulti2@reducedDims$LSI_ATAC$matSVD))
+print("LSI_RNA dimensions:")
+print(dim(projMulti2@reducedDims$LSI_RNA$matSVD))
+
 
 # reduce the number of dimensions with Both scATAC and scRNA data Combined
 print("Reduced dimensions with Both scATAC and scRNA data Combined")
