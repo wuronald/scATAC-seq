@@ -67,20 +67,46 @@ features_filtered <- features_filtered[sapply(features_filtered, length) > 0]
 print("Filtered features (genes present in dataset):")
 print(sapply(features_filtered, length))
 
-# add module scores for each feature set
-proj <- addModuleScore(proj,
-    useMatrix = "GeneExpressionMatrix",
-    name = "Module",
-    features = features_filtered)
+# Check if we have any valid feature sets left
+if(length(features_filtered) == 0) {
+  stop("No valid feature sets found after filtering. Check your gene names.")
+}
+
+# Add module scores one by one to avoid batch processing issues
+print("Adding module scores individually...")
+for(i in seq_along(features_filtered)) {
+  feature_name <- names(features_filtered)[i]
+  feature_genes <- features_filtered[[i]]
+  
+  print(paste("Adding module score for:", feature_name, "with", length(feature_genes), "genes"))
+  
+  # Create a temporary feature list with just this one feature
+  temp_features <- list()
+  temp_features[[feature_name]] <- feature_genes
+  
+  # Add module score
+  proj <- addModuleScore(proj,
+      useMatrix = "GeneExpressionMatrix",
+      name = "Module",
+      features = temp_features)
+}
+# Verify that the module scores were added
+print("Check if Module scores added successfully to cellColData")
+print(names(proj@cellColData))
 
 # Create plots for ALL module scores efficiently
 print("Creating plots for all module scores")
 
-# Get all module score names
-module_names <- paste0("Module.", names(features_filtered))
+# Get all module score names (updated naming scheme)
+module_names <- paste0("Module_", names(features_filtered), "_", names(features_filtered))
 
 # Create all plots at once using lapply
-plot_list <- lapply(module_names, function(module_name) {
+plot_list <- lapply(seq_along(features_filtered), function(i) {
+  feature_name <- names(features_filtered)[i]
+  module_name <- paste0("Module.", feature_name)
+  
+  print(paste("Creating plot for:", module_name))
+  
   plotEmbedding(proj,
     embedding = "UMAP_Harmony_LSI_Combined",
     colorBy = "cellColData",
@@ -89,7 +115,7 @@ plot_list <- lapply(module_names, function(module_name) {
 })
 
 # Name the plots for better organization
-names(plot_list) <- gsub("Module\\.", "", module_names)
+names(plot_list) <- names(features_filtered)
 
 # Save all plots to PDF
 print("Saving all plots to PDF")
