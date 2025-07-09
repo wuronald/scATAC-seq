@@ -34,13 +34,17 @@ genes_gr <- getGenes(proj)
 gene_symbols <- mcols(genes_gr)$symbol
 
 # Select marker genes for different cell types
+# Below are Mouse Motor Cortex cell type makers from Hubmap/Azimuth
 features <- list(
   Glutamatergic_score = c("Celf2", "Ptprd", "Arpp21", "Sv2b", "Pcsk2", "Phactr1", "Kalrn", "Nrg1", "Ano3", "Satb2"),
   GABAergic_score  = c("Grip1", "Galntl6", "Gad1", "Gad2", "Dlx6os1", "Cntnap2", "Gm26905", "Kcnmb2", "Kcnip1", "Erbb4"),
+  Astro_score = c("Gpc5", "Slc1a2", "Slc1a3", "Apoe", "Wdr17", "Plpp3", "Rorb", "Rmst", "Slc4a4", "Htra1"),
   Endo_score  = c("Flt1", "Slco1a4", "Adgrl4", "Ly6c1", "Slc2a1", "Klf2", "Mecom", "Bsg", "Ly6a", "Pltp"),
-  Oligo_score  = c("Plp1", "Mbp", "St18", "Prr5l", "Mobp", "Mal", "Mog", "Cldn11", "Pde4b", "Mag"),
   Micro_PVM_score = c("Inpp5d", "Hexb", "Tgfbr1", "C1qa", "Ctss", "C1qb", "Zfhx3", "C1qc", "Selplg", "Cx3cr1"),
+  Oligo_score  = c("Plp1", "Mbp", "St18", "Prr5l", "Mobp", "Mal", "Mog", "Cldn11", "Pde4b", "Mag"),
   OPC_score  = c("Lhfpl3", "Vcan", "Tnr", "Ptprz1", "Gm4876", "Xylt1", "Pdgfra", "Epn2", "Cacng4", "Megf11"),
+  Peri_score = c("Atp13a5", "Vtn", "Cald1", "Ebf1", "Abcc9", "Dlc1", "Pdgfrb", "Tbx3os1", "Pde8b", "Slc38a11"),
+  SMC_score = c("Acta2", "Map3k7cl", "Gm6249", "Myh11", "Tagln", "Pdlim3", "Ephx3", "Olfr558", "Crip1", "Tbx2"),
   Vlmc_score  =c("Ptgds", "Bnc2", "Cped1", "Slc7a11", "Bmp6", "Apod", "Mgp", "Eya2", "Ranbp3l", "Adam12")
 )
 
