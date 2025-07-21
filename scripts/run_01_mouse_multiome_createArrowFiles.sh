@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
 #SBATCH --mem=60G
-#SBATCH --time=03:00:00
+#SBATCH --time=01:30:00
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
