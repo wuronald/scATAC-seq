@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=run_04_mouse_multiome_AUCell
-#SBATCH --output=run_04_mouse_multiome_AUCell_%j.out
-#SBATCH --error=run_04_mouse_multiome_AUCell_%j.err
+#SBATCH --job-name=run_04_mouse_multiome_AUCell_optimized
+#SBATCH --output=run_04_mouse_multiome_AUCell_optimized_%j.out
+#SBATCH --error=run_04_mouse_multiome_AUCell_optimized_%j.err
 #SBATCH --partition=himem
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -36,13 +36,14 @@ if(length(missing_packages) > 0) {
   stop("Missing required packages: ", paste(missing_packages, collapse = ", "))
 }
 
-library(here)
+
 library(ArchR)
 library(AUCell)
 library(ggrastr)
 library(readr)
 library(dplyr)
 library(tools)
+library(here)
 
 # Configuration
 PROJECT_DIR <- "mouse_multiome_harmony_merged_subset"
@@ -125,13 +126,13 @@ load_gene_sets <- function() {
     names(geneSets) <- tools::file_path_sans_ext(basename(txt_files))
   }
   
-  # Load PIMO signature
-  pimo_file <- here("data", "Signatures", "pimo_sig", "ST_PIMO_FFPE_spot_gene_signature_HGNC.csv")
+  # Load mouse PIMO signature
+  pimo_file <- here("data", "Signatures", "pimo_sig", "phoebe_mouse_pimo_sigs", "mouse_pimo_sig.csv")
   
   if (file.exists(pimo_file)) {
     PIMO_pos <- readr::read_csv(pimo_file, show_col_types = FALSE) %>%
-      dplyr::filter(logFC >= 0) %>%
-      dplyr::pull(Gene)
+      dplyr::filter(logfoldchanges >= 0) %>%
+      dplyr::pull(names)
     
     geneSets <- append(geneSets, list(PIMO_pos = PIMO_pos))
     cat("Added PIMO signature with", length(PIMO_pos), "genes\n")
