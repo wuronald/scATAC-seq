@@ -44,3 +44,7 @@ ArchRLogs/
 *.pdf
 # png
 *.png
+# CSV
+*.csv
+# RData
+*.RData

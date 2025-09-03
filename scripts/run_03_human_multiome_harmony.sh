@@ -149,7 +149,7 @@ for (i in seq_along(new_embeddings)) {
                        )
     # save each plot
     plotPDF(u, 
-            name = paste0("Harmony-Plot-UMAP-Clusters_harmony-", new_embeddings[i], original_reducedDims[j],".pdf"), 
+            name = paste0("Harmony-Plot-UMAP-Clusters_harmony-", new_embeddings[i],"-", original_reducedDims[j],".pdf"), 
             ArchRProj = proj, 
             addDOC = TRUE, # adds date of creation to end of filename
             width = 5, height = 5)
@@ -158,7 +158,7 @@ for (i in seq_along(new_embeddings)) {
 
 # Save the project
 print("Saving Project")
-# saveArchRProject(ArchRProj = proj, outputDirectory = "human_multiome", load = TRUE)
+saveArchRProject(ArchRProj = proj, outputDirectory = "human_multiome_harmony", load = TRUE)
 EOF
 
 echo "ArchR analysis completed"
