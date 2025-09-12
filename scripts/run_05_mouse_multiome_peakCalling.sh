@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
 #SBATCH --mem=60G
-#SBATCH --time=02:00:00
+#SBATCH --time=03:00:00
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
@@ -93,6 +93,10 @@ for (groupBy in groupBy_list) {
   # Tabulate type of peaks
   print("tabulate type of peaks")
   print(table(myPeakSet$peakType))
+
+  # Save the peakSet gr object for easier load in the future
+  print(paste("Saved peakSet as .RData for", groupBy))
+  save(myPeakSet, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/PeakSet_gr_", groupBy, ".RData"))
   
   # Check available matrices
   print("check available matrices")
@@ -111,31 +115,28 @@ for (groupBy in groupBy_list) {
     print("fix incompatible dimensions error")
     proj_hyp2@cellColData[[groupBy]] <- as.logical(proj_hyp2@cellColData[[groupBy]])
   }
-  
-# TEMPORARY FOR DEBUGGING: Save the project prior to where error occurs
-#print("Saving ArchR project before getMarkerFeatures step")
-#proj_hyp2 <- saveArchRProject(ArchRProj = proj_hyp2, outputDirectory = "mouse_multiome_harmony_merged_malig_peak_subset", load = TRUE)
+
+# Check dimensions of PeakMatrix and cellColData  
 print("Check dimensions of PeakMatrix and cellColData: ")
 # Get PeakMatrix as a matrix object
 peakMat <- getMatrixFromProject(ArchRProj = proj_hyp2, useMatrix = "PeakMatrix")
 print(dim(assay(peakMat)))
 print(length(proj_hyp2@cellColData[[groupBy]]))
 
-  # Get marker peaks for groupBy
-  print(paste("Get marker peaks for", groupBy, "groups"))
+# Get marker peaks for groupBy
+print(paste("Get marker peaks for", groupBy, "groups"))
 
   markersPeaks <- getMarkerFeatures(
     ArchRProj = proj_hyp2,
     useMatrix = "PeakMatrix",
     groupBy = groupBy,
     bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
-    # bias = c("TSSEnrichment", "nFrags", "Gex_nUMI"),  
     testMethod = "wilcoxon"
   )
   
-  # Save the markersPeaks SE object for easier load in the future
-  print(paste("Saved markersPeaks as .RData for", groupBy))
-  save(markersPeaks, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_", groupBy, ".RData"))
+# Save the markersPeaks SE object for easier load in the future
+print(paste("Saved markersPeaks as .RData for", groupBy))
+save(markersPeaks, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_", groupBy, ".RData"))
 
 }
 # Save the project after each groupBy
