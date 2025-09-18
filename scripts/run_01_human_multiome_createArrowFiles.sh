@@ -71,6 +71,16 @@ print(atacFiles)
 
 print("RNA input files:")
 print(rnaFiles)
+
+# Remove sample "Zadeh_Shelia__61" (deemed low quality in scRNA))
+remove_sample <- "Zadeh_Shelia__61"
+if (remove_sample %in% names(atacFiles)) {
+  atacFiles <- atacFiles[names(atacFiles) != remove_sample]
+}
+if (remove_sample %in% names(rnaFiles)) {
+  rnaFiles <- rnaFiles[names(rnaFiles) != remove_sample]
+}
+
 print("Starting create arrowFiles")
 
 # create arrow files
