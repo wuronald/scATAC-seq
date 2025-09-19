@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=run_05_mouse_multiome_peakCalling
-#SBATCH --output=run_05_mouse_multiome_peakCalling_%j.out
-#SBATCH --error=run_05_mouse_multiome_peakCalling_%j.err
+#SBATCH --job-name=run_05_human_multiome_peakCalling
+#SBATCH --output=run_05_human_multiome_peakCalling_%j.out
+#SBATCH --error=run_05_human_multiome_peakCalling_%j.err
 #SBATCH --partition=himem
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -19,28 +19,28 @@ Rscript - <<'EOF'
 
 # load libraries
 library(ArchR)
-library(BSgenome.Mmusculus.UCSC.mm10)
+library(BSgenome.Hsapiens.UCSC.hg38)
 library(here)
 set.seed(1)
 
 # Set the number of threads for ArchR
 addArchRThreads(threads = 18)
 
-# set genome to mm10
-addArchRGenome("mm10")
+# set genome to hg38
+addArchRGenome("hg38")
 
 # Load the project
-proj_hyp <- loadArchRProject(path = "mouse_multiome_harmony_merged_subset")
+proj_hyp <- loadArchRProject(path = "human_multiome_harmony_merged")
 
 # subset to only malignant cells
-print("Subsetting ArchR object to only malignant cells: ")
-malignant_cells <- proj_hyp$cellNames[which(proj_hyp$Azimuth_class == "Malignant")]
-print(paste("Number of malignant cells:", length(malignant_cells)))
+print("Subsetting ArchR object to only malignant cells and non-ambiguous: ")
+malignant_cells <- proj_hyp$cellNames[which(proj_hyp$Azimuth_class == "Malignant" & proj_hyp$Ambiguous == FALSE)]
+print(paste("Number of malignant non-ambiguous cells:", length(malignant_cells)))
 
 proj_hyp <- subsetArchRProject(
   ArchRProj = proj_hyp,
   cells = malignant_cells,
-  outputDirectory = "mouse_multiome_harmony_merged_malig_peak_subset",
+  outputDirectory = "human_multiome_harmony_merged_malig_peak",
   dropCells = TRUE,
   force = TRUE
   )
@@ -59,8 +59,8 @@ if (exists("findMacs2")) {
 }
 
 # Set of ArchR object metadata columns to iterate over for peak calling
-groupBy_list <- c("PIMO_pos", "hybrid_pair")
-# groupBy_list <- c("hybrid_pair")
+groupBy_list <- c("PIMO_up_status", "hybrid_pair")
+
 print(paste("GroupBy list:", paste(groupBy_list, collapse = ", ")))
 
 for (groupBy in groupBy_list) {
@@ -93,7 +93,7 @@ for (groupBy in groupBy_list) {
 
   # Save the peakSet gr object for easier load in the future
   print(paste("Saved peakSet as .RData for", groupBy))
-  save(myPeakSet, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/PeakSet_gr_", groupBy, ".RData"))
+  saveRDS(myPeakSet, file = paste0("human_multiome_harmony_merged_malig_peak/PeakCalls/PeakSet_gr_", groupBy, ".rds"))
   
   # Check available matrices
   print("check available matrices")
@@ -133,12 +133,12 @@ print(paste("Get marker peaks for", groupBy, "groups"))
   )
   
 # Save the markersPeaks SE object for easier load in the future
-print(paste("Saved markersPeaks as .RData for", groupBy))
-save(markersPeaks, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_", groupBy, ".RData"))
+print(paste("Saved markersPeaks as .rds for", groupBy))
+saveRDS(markersPeaks, file = paste0("human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_", groupBy, ".rds"))
 
 }
 # Save the project after each groupBy
-proj_hyp2 <- saveArchRProject(ArchRProj = proj_hyp2, outputDirectory = "mouse_multiome_harmony_merged_malig_peak_subset", load = TRUE)
+proj_hyp2 <- saveArchRProject(ArchRProj = proj_hyp2, outputDirectory = "human_multiome_harmony_merged_malig_peak", load = TRUE)
 EOF
 
 echo "Peak Calling analysis completed"

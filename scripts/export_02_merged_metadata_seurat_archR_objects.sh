@@ -12,25 +12,54 @@
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
 
+# Usage: sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh human_multiome_harmony
+ARCHR_DIR="$1"
+export ARCHR_DIR
+echo "ARCHR_DIR is set to '$ARCHR_DIR'"
+if [ -z "$ARCHR_DIR" ]; then
+    echo "Usage: $0 <ARCHR_DIR>"
+    exit 1
+fi
+
 # Run R script
 Rscript - <<'EOF'
 
 # load libraries
 library(ArchR)
-library(BSgenome.Mmusculus.UCSC.mm10)
 library(Seurat)
 library(here)
 set.seed(1)
+
+archr_dir <- Sys.getenv("ARCHR_DIR")
+print(paste("ARCHR_DIR is:", archr_dir))
+output_dir <- paste0(archr_dir, "_merged")
+
+# Detect species from folder name
+if (grepl("human", archr_dir, ignore.case=TRUE)) {
+    library(BSgenome.Hsapiens.UCSC.hg38)
+    genome <- "hg38"
+} else if (grepl("mouse", archr_dir, ignore.case=TRUE)) {
+    library(BSgenome.Mmusculus.UCSC.mm10)
+    genome <- "mm10"
+} else {
+    stop("Could not determine species from ARCHR_DIR name.")
+}
+
 
 # Set the number of threads for ArchR
 addArchRThreads(threads = 18)
 
 # Load the project
-print("Loading ArchR project")
-proj <- loadArchRProject(path = "mouse_multiome_harmony_test")
+print(paste("Loading ArchR project from", archr_dir))
+proj <- loadArchRProject(path = archr_dir)
 
 # Load Seurat object metadata
-seurat_metadata <- readr::read_csv(here("mouse_multiome_harmony_test","merged_seurat_metadata.csv"))
+metadata_path <- here(archr_dir, "merged_seurat_metadata.csv")
+if (!file.exists(metadata_path)) {
+    stop(paste("Seurat Metadata file does not exist:", metadata_path))
+}
+seurat_metadata <- readr::read_csv(metadata_path)
+print(paste("Seurat metadata loaded from", metadata_path))
 
 # get barcodes from Seurat object
 print("Getting barcodes from Seurat metadata")
@@ -47,7 +76,6 @@ print(paste("Number of cells in the ArchR project:", length(cells))) # 26622
 # atac barcodes seems to be missing from the ArchR object, so we will filter based on RNA barcodes
 #cellsToKeep <- which(cells %in% seurat_atac_barcodes)
 cellsToKeep <- which(cells %in% seurat_rna_barcodes)
-
 print(paste("Number of cells to keep:", length(cellsToKeep))) # 21559
 
 # Subset ArchR project to keep only the cells present in the Seurat object
@@ -56,11 +84,10 @@ print("Subsetting ArchR project to keep only the cells present in the Seurat obj
 projSubset <- subsetArchRProject(
   ArchRProj = proj,
   cells = proj$cellNames[cellsToKeep],
-  outputDirectory = "mouse_multiome_harmony_merged_subset",
+  outputDirectory = output_dir,
   dropCells = TRUE,
   force = TRUE
   )
-# projSubset <- proj[cellsToKeep, ] # improper way to subset ArchR project
 
 # subset seurat metadata to keep only the cells present in the ArchR project
 seurat_metadata_subset <- seurat_metadata[seurat_metadata$seurat_gex_barcode %in% projSubset$cellNames, ] 
@@ -75,7 +102,12 @@ projSubset$cellNames == seurat_metadata_subset$seurat_gex_barcode
 print(paste("Are the cell names in the same order?", are_identical))
 
 # Dynamically add columns from seurat_metadata_subset to ArchR metadata
-cols_to_add <- c("hybrid_pair","Azimuth_class", "Azimuth_subclass") # add more column names as needed
+cols_to_add <- c("hybrid_pair","Azimuth_class", "Azimuth_subclass",
+"Ambiguous", "PIMO_status", "PIMO_up_status") # add more column names as needed
+
+# Only keep columns that exist in seurat_metadata_subset
+cols_to_add <- cols_to_add[cols_to_add %in% colnames(seurat_metadata_subset)]
+print(paste("Columns to add to ArchR metadata:", paste(cols_to_add, collapse = ", ")))
 
 for (col in cols_to_add) {
     projSubset <- addCellColData(
@@ -88,7 +120,7 @@ for (col in cols_to_add) {
 
 # Save the project
 print("Saving the project")
-saveArchRProject(ArchRProj = projSubset, outputDirectory = "mouse_multiome_harmony_merged_subset", load = TRUE)
+saveArchRProject(ArchRProj = projSubset, outputDirectory = output_dir, load = TRUE)
 
 print("Script completed!")
 EOF

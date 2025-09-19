@@ -40,7 +40,7 @@ print(paste0("Available original embeddings:", original_embeddings))
 cell_samples <- getCellColData(proj, select = "Sample", drop = TRUE)
 batch_vector <- ifelse(cell_samples == "Zadeh__C0736__5117", "batch1",
                  ifelse(cell_samples == "Zadeh_Shelia__56", "batch2",
-                 ifelse(cell_samples %in% c("Zadeh_Shelia__60", "Zadeh_Shelia__61"), "batch3",
+                 ifelse(cell_samples %in% c("Zadeh_Shelia__60"), "batch3",
                  ifelse(cell_samples %in% c("Zadeh_Sheila__PIMO66", "Zadeh_Sheila__PIMO67", "Zadeh_Sheila__PIMO70_b"), "batch4",
                  ifelse(cell_samples == "Zadeh_Sheila__PIMO70", "batch5", NA)))))
 
