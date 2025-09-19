@@ -48,3 +48,4 @@ ArchRLogs/
 *.csv
 # RData
 *.RData
+*.rds
