@@ -116,7 +116,8 @@ p <- plotBrowserTrack(
     ArchRProj = proj_hyp, 
     groupBy = "PIMO_up_status", 
     geneSymbol = gene,
-    features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE)["PIMOup"],
+    # features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE)["PIMOup"],
+    features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
     upstream = 50000,
     downstream = 50000
 )
