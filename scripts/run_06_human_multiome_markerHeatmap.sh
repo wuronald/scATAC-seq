@@ -121,24 +121,42 @@ print("All MA and Volcano plots created and saved.")
 # get gene annotation for hg38
 geneAnno <- getGeneAnnotation(proj_hyp)
 
-# Plot marker peaks in browser tracks for genes of interest
+# Plot marker peaks in browser tracks for genes of interest:
+print("Plotting marker peaks in browser tracks for genes of interest")
 genes <- c("CTSB","OLIG1", "OLIG2",
 "SOX2", "CD109", "CD44", "RND3", "STMN2", "NGFR", "SOX10", 
 "ID2", "ID3", "CA9", "VEGFA", "SLC2A1") 
-
-for (gene in genes) {
-print(paste("Plotting marker peaks in browser tracks for: ", gene))
+print(paste("Genes of interest:", paste(genes, collapse = ", ")))
 
 p <- plotBrowserTrack(
     ArchRProj = proj_hyp, 
     groupBy = "PIMO_up_status", 
-    geneSymbol = gene,
+    geneSymbol = genes,
     features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
     upstream = 50000,
     downstream = 50000
 )
+plotPDF(plotList = p, 
+    name = paste0("markerPeaks_browserTrack-PIMO_up_status"), 
+    ArchRProj = projHeme5, 
+    addDOC = TRUE, 
+    width = 5, 
+    height = 5
+    )
 
-plotPDF(p, name = paste0("markerPeaks_browserTrack-PIMO_up_status_", gene), width = 5, height = 5, ArchRProj = proj_hyp, addDOC = TRUE)
-}
+# for (gene in genes) {
+# print(paste("Plotting marker peaks in browser tracks for: ", gene))
+
+# p <- plotBrowserTrack(
+#     ArchRProj = proj_hyp, 
+#     groupBy = "PIMO_up_status", 
+#     geneSymbol = gene,
+#     features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
+#     upstream = 50000,
+#     downstream = 50000
+# )
+
+# plotPDF(p, name = paste0("markerPeaks_browserTrack-PIMO_up_status_", gene), width = 5, height = 5, ArchRProj = proj_hyp, addDOC = TRUE)
+# }
 
 EOF
