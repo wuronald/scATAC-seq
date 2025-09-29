@@ -1,0 +1,290 @@
+---
+title: "human_multiome_SummarizedExperiment_EDA"
+output: html_notebook
+---
+
+# Introduction
+
+Here we explore the SummarizedExperiment object output from peak calling script operated on the human multiome. The Granges object derived from the SE object is also explored.
+
+# Load Libraries
+```{r load libraries}
+# Load required libraries
+library(SummarizedExperiment)
+library(ggplot2)
+library(pheatmap)
+library(tidyverse)
+library(here)
+
+```
+# Load SummarizedExperiment and GRanges Object
+```{r load SE}
+markersPeak <- readRDS(
+  here("Plots","human_multiome","human_multiome_harmony_merged_malig_peak",
+       "markersPeaks_PIMO_up_status.rds")
+)
+
+# SimpleList of GRanges result from peakCalling
+# This is extracted from above via ArchR::getMarkers()
+markersPeak_gr <- readRDS(
+  here("Plots","human_multiome","human_multiome_harmony_merged_malig_peak",
+       "markersPeaks_GR_PIMO_up_status.rds")
+)
+```
+
+# Exploratory Data Analysis
+## SE
+
+```{r eda SE}
+se <- markersPeak
+# Basic info about the object
+dim(se)  # dimensions (Features x samples)
+assayNames(se)  # available assay data ("Log2FC"   "Mean"     "FDR"      "Pval"     "MeanDiff" "AUC"      "MeanBGD" )
+colnames(se)  # sample names
+rownames(se)  # feature
+
+# Metadata exploration
+colData(se)  # sample metadata
+rowData(se)  # feature metadata
+metadata(se)  # experiment metadata
+
+#
+rr <- GRanges(rowData(se)$seqnames, IRanges(rowData(se)$start, rowData(se)$end))
+
+
+# Get the different assays
+log2fc <- assay(se, "Log2FC")
+mean_expr <- assay(se, "Mean") 
+fdr <- assay(se, "FDR")
+pval <- assay(se, "Pval")
+auc <- assay(se, "AUC")  # Area Under Curve (often from ROC analysis)
+
+# Basic statistics
+summary(log2fc)
+summary(fdr)
+
+# count NAs in FDR
+na_per_comparison <- colSums(is.na(fdr))
+print(na_per_comparison)
+sum(is.na(fdr)) # 761
+```
+Here we observe 761 NAs in FDR column total among all the groups within PIMO_up_status. Recall, we start with a total of 167905 features unfiltered.
+167905 - 761 = 167144
+
+Below is a breakdown for each group:
+167905 - 35 = 167870
+167905 - 49 = 167856
+167905 - 677 = 167228
+
+## EDA: Granges
+```{r eda GR}
+names(markersPeak_gr)
+markersPeak_gr[["PIMOdown"]] %>% length # 167870
+markersPeak_gr[["PIMOinter"]] %>% length # 167856
+markersPeak_gr[["PIMOup"]] %>% length # 167228
+
+
+markersPeak_gr[["PIMOup"]] %>% 
+  subset(Log2FC > 0 & FDR < 1) %>% length # 66921
+
+# cutoff used previous for MA plot
+# "FDR <= 0.1 & abs(Log2FC) >= 0.5"
+cutOff <- "FDR <= 0.1 & abs(Log2FC) >= 0.5"
+
+markersPeak_gr[["PIMOup"]] %>%
+  subset(FDR <= 0.1 & Log2FC >= 0.5) %>% length # 1268
+markersPeak_gr[["PIMOup"]] %>%
+  subset(FDR <= 0.1 & Log2FC <= -0.5) %>% length # 2059
+
+for (i in names(markersPeak_gr)) {
+  print(paste("For the PIMO_up_status category:", i))
+  print(paste("Using threshold: ", cutOff))
+  
+  up <- markersPeak_gr[[i]] %>%
+    subset(FDR <= 0.1 & Log2FC >= 0.5) %>% length
+  down <- markersPeak_gr[[i]] %>%
+    subset(FDR <= 0.1 & Log2FC <= -0.5) %>% length
+  
+  print(paste("The number of upregulated features:",up))
+  print(paste("The number of downregulated features:",down))
+}
+
+# intersect all three granges
+# Assume gr1, gr2, gr3 are your GRanges objects
+result <- BiocGenerics::Reduce(GenomicRanges::intersect, list(markersPeak_gr[["PIMOup"]], markersPeak_gr[["PIMOup"]], markersPeak_gr[["PIMOup"]]))
+
+GenomicRanges::intersect(markersPeak_gr[["PIMOup"]],markersPeak_gr[["PIMOup"]])
+
+# count NAs
+markersPeak_gr[["PIMOup"]]$FDR %>% is.na %>% table # FALSE 167228
+markersPeak_gr[["PIMOup"]]$FDR %>% length() # 167228
+
+  
+```
+
+The number of features in the MA plots (167905) doesn't match the total features found in the Granges tables, which differ for each PIMO category.
+Oddly, when we intersect the GRanges from the three categories, we end up with 166949 features. When the PIMOup GRanges (167228) is intersected with itself, we end up with 166949 as well, suggesting that some features are lost. It's unclear where the features went, and we also checked for NAs.
+
+```{r claude}
+library(SummarizedExperiment)
+library(S4Vectors)
+library(GenomicRanges)
+library(IRanges)
+
+# Standalone implementation of getMarkers function
+getMarkers_standalone <- function(
+  seMarker = NULL,
+  cutOff = "FDR <= 0.1 & Log2FC >= 0.5",
+  n = NULL,
+  returnGR = FALSE
+) {
+  
+  # Input validation
+  if (!is(seMarker, "SummarizedExperiment")) {
+    stop("seMarker must be a SummarizedExperiment object")
+  }
+  
+  if (!is.character(cutOff)) {
+    stop("cutOff must be a character string")
+  }
+  
+  if (!is.null(n) && (!is.numeric(n) || n <= 0)) {
+    stop("n must be a positive integer or NULL")
+  }
+  
+  if (!is.logical(returnGR)) {
+    stop("returnGR must be TRUE or FALSE")
+  }
+  
+  # Get available assay names
+  assayNames <- names(assays(seMarker))
+  
+  # Create environment with assay data for evaluation
+  eval_env <- new.env()
+  for(an in assayNames) {
+    assign(an, assays(seMarker)[[an]], envir = eval_env)
+  }
+  
+  # Evaluate the cutOff expression
+  passMat <- eval(parse(text = cutOff), envir = eval_env)
+  
+  # Handle NAs
+  passMat[is.na(passMat)] <- FALSE
+  
+  if (returnGR) {
+    # Check if this was originally from PeakMatrix
+    useMatrix <- NULL
+    if (!is.null(metadata(seMarker)$Params)) {
+      useMatrix <- metadata(seMarker)$Params$useMatrix
+    }
+    
+    if (!is.null(useMatrix) && useMatrix != "PeakMatrix") {
+      stop("Only markers can be returned as GRanges when original matrix was PeakMatrix!")
+    }
+    
+    # Create GRanges from rowData
+    rowData_df <- as.data.frame(rowData(seMarker))
+    
+    # Check if we have the required columns for GRanges
+    required_cols <- c("seqnames", "start", "end")
+    if (!all(required_cols %in% colnames(rowData_df))) {
+      stop("rowData must contain 'seqnames', 'start', and 'end' columns for GRanges output")
+    }
+    
+    rr <- GRanges(
+      seqnames = rowData_df$seqnames,
+      ranges = IRanges(start = rowData_df$start, end = rowData_df$end)
+    )
+    
+    # Create GRangesList
+    grL <- lapply(seq_len(ncol(passMat)), function(x) {
+      idx <- which(passMat[, x])
+      if (length(idx) == 0) {
+        return(GRanges())
+      }
+      
+      rrx <- rr[idx]
+      
+      # Add assay data
+      rrx$Log2FC <- assays(seMarker[idx, ])$Log2FC[, x]
+      rrx$FDR <- assays(seMarker[idx, ])$FDR[, x]
+      
+      if ("MeanDiff" %in% assayNames) {
+        rrx$MeanDiff <- assays(seMarker[idx, ])$MeanDiff[, x]
+      }
+      
+      # Sort by FDR
+      rrx <- rrx[order(rrx$FDR)]
+      
+      # Limit to n features if specified
+      if (!is.null(n) && n < length(rrx)) {
+        rrx <- rrx[seq_len(n)]
+      }
+      
+      return(rrx)
+    })
+    
+    names(grL) <- colnames(seMarker)
+    grL <- SimpleList(grL)
+    
+    # Sort by names
+    if (requireNamespace("gtools", quietly = TRUE)) {
+      grL <- grL[gtools::mixedsort(names(grL))]
+    } else {
+      grL <- grL[sort(names(grL))]
+    }
+    
+    return(grL)
+    
+  } else {
+    # Return as list of DataFrames
+    markerList <- lapply(seq_len(ncol(passMat)), function(x) {
+      idx <- which(passMat[, x])
+      if (length(idx) == 0) {
+        return(data.frame())
+      }
+      
+      rrx <- as.data.frame(rowData(seMarker[idx, ]))
+      
+      # Add assay data
+      rrx$Log2FC <- assays(seMarker[idx, ])$Log2FC[, x]
+      rrx$FDR <- assays(seMarker[idx, ])$FDR[, x]
+      
+      if ("MeanDiff" %in% assayNames) {
+        rrx$MeanDiff <- assays(seMarker[idx, ])$MeanDiff[, x]
+      }
+      
+      # Sort by FDR
+      rrx <- rrx[order(rrx$FDR), , drop = FALSE]
+      
+      # Limit to n features if specified
+      if (!is.null(n) && n < nrow(rrx)) {
+        rrx <- rrx[seq_len(n), , drop = FALSE]
+      }
+      
+      return(rrx)
+    })
+    
+    names(markerList) <- colnames(seMarker)
+    markerList <- SimpleList(markerList)
+    
+    return(markerList)
+  }
+}
+
+# Example usage:
+markers <- getMarkers_standalone(se, cutOff = "FDR < 1 & Log2FC > 0")
+# markers_strict <- getMarkers_standalone(seMarker, cutOff = "FDR <= 0.01 & Log2FC >= 1.0", n = 50)
+# markers_gr <- getMarkers_standalone(seMarker, returnGR = TRUE)  # Only if from PeakMatrix
+```
+
+```{r plot MA}
+# here we plot for PIMOup
+# cutOff = "FDR <= 0.1 & Log2FC >= 0.5"
+# "FDR <= 1 & Log2FC >= 0"
+markers[["PIMOup"]] %>% dim() # 75393     7
+markers[["PIMOup"]] %>% nrow # 75393
+sum(markers[["PIMOup"]]$FDR < 0.1)
+
+
+```

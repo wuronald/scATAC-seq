@@ -59,7 +59,8 @@ if (exists("findMacs2")) {
 }
 
 # Set of ArchR object metadata columns to iterate over for peak calling
-groupBy_list <- c("PIMO_up_status", "hybrid_pair")
+# groupBy_list <- c("PIMO_up_status", "hybrid_pair")
+groupBy_list <- c("hybrid_pair", "PIMO_up_status")
 
 print(paste("GroupBy list:", paste(groupBy_list, collapse = ", ")))
 
@@ -137,7 +138,31 @@ print(paste("Saved markersPeaks as .rds for", groupBy))
 saveRDS(markersPeaks, file = paste0("human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_", groupBy, ".rds"))
 
 }
-# Save the project after each groupBy
+# pairwise test between PIMO_up_status groups: PIMOup vs PIMOdown
+print("Pairwise test between PIMO_up_status groups: PIMOup vs PIMOdown")
+markerTest <- getMarkerFeatures(
+  ArchRProj = proj_hyp2, 
+  useMatrix = "PeakMatrix",
+  groupBy = "PIMO_up_status",
+  testMethod = "wilcoxon",
+  bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
+  useGroups = "PIMOup",
+  bgdGroups = "PIMOdown"
+)
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for PIMO_up_status PIMOup vs PIMOdown" ))
+saveRDS(markerTest, file = paste0("human_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_PIMO_up_status_", "PIMOup_vs_PIMOdown", ".rds"))
+
+# extract markerTest GR object for PIMO_up_status groups
+print("Extracting markerTestGR object for PIMO_up_status")
+markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
+
+print("Number of markerTest peaks identified per group:")
+print(sapply(markerTest_GR, length))
+
+saveRDS(markerTest_GR, file = "human_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_GR_PIMO_up_status_PIMOup_vs_PIMOdown.rds")
+
+# Save the project
 proj_hyp2 <- saveArchRProject(ArchRProj = proj_hyp2, outputDirectory = "human_multiome_harmony_merged_malig_peak", load = TRUE)
 EOF
 

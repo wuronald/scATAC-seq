@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
 #SBATCH --mem=16G
-#SBATCH --time=01:30:00
+#SBATCH --time=00:30:00
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
@@ -30,17 +30,17 @@ addArchRGenome("hg38")
 # Load the project
 proj_hyp <- loadArchRProject(path = "human_multiome_harmony_merged_malig_peak")
 
-# load marker peaks SummarizedExperiment obj if not already in memory; otherwise create it
+# path to saved markersPeaks RDS file
+#markersPeaks_rds <- "human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_PIMO_up_status.rds"
+markersPeaks_rds <- "human_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_PIMO_up_status_PIMOup_vs_PIMOdown.rds"
+
 if (!exists("markersPeaks")) {
     print("loading markersPeaks")
-    if (file.exists("human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_PIMO_up_status.rds")) {
+    if (file.exists(markersPeaks_rds)) {
         print("previously saved markersPeaks loaded")
-        # markersPeaks <- readRDS(file = "human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_hybrid_pair.rds")
-        markersPeaks <- readRDS(file = "human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_PIMO_up_status.rds")
-    }
-    else{
+        markersPeaks <- readRDS(file = markersPeaks_rds)
+    } else {
         print("extracting markersPeaks")
-        # Extract the markersPeaks 
         markersPeaks <- getMarkerFeatures(
             ArchRProj = proj_hyp,
             useMatrix = "PeakMatrix",
@@ -59,6 +59,22 @@ if (!is(markersPeaks, "SummarizedExperiment")) {
     print("markersPeaks is a valid SummarizedExperiment object.")
 }
 
+# Extract GR object from SE object for PIMO_up_status groups (used later for MA plots in rstudio)
+print("Extracting marker peaks GR object for PIMO_up_status groups")
+
+markersPeaks_GR_rds <- "human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_GR_PIMO_up_status.rds"
+if (file.exists(markersPeaks_GR_rds)) {
+    print(paste("File already exists:", markersPeaks_GR_rds))
+    markersPeaks_GR <- readRDS(file = markersPeaks_GR_rds)
+} else {
+    markersPeaks_GR <- getMarkers(markersPeaks, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
+    saveRDS(markersPeaks_GR, file = markersPeaks_GR_rds)
+    print(paste("Saved markersPeaks_GR to:", markersPeaks_GR_rds))
+}
+
+print(paste("Number of marker peaks identified:", sapply(markersPeaks_GR, length)))
+
+
 # Plot marker heatmap for Azimuth_class
 print("Plotting marker heatmap for PIMO_up_status groups")
 cutOff <- "FDR <= 0.1 & abs(Log2FC) >= 0.5"
@@ -68,6 +84,7 @@ heatmap <- plotMarkerHeatmap(
     seMarker = markersPeaks,
     cutOff = cutOff,
     limits = c(-2, 2),
+    plotLog2FC = TRUE,
     transpose = TRUE,
     returnMatrix = FALSE
 )
@@ -116,7 +133,6 @@ p <- plotBrowserTrack(
     ArchRProj = proj_hyp, 
     groupBy = "PIMO_up_status", 
     geneSymbol = gene,
-    # features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE)["PIMOup"],
     features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
     upstream = 50000,
     downstream = 50000
