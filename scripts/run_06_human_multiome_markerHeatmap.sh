@@ -138,7 +138,7 @@ p <- plotBrowserTrack(
 )
 plotPDF(plotList = p, 
     name = paste0("markerPeaks_browserTrack-PIMO_up_status"), 
-    ArchRProj = projHeme5, 
+    ArchRProj = proj_hyp, 
     addDOC = TRUE, 
     width = 5, 
     height = 5

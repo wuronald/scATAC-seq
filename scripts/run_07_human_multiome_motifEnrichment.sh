@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=run_06_human_multiome_motifEnrichment
-#SBATCH --output=run_06_human_multiome_motifEnrichment_%j.out
-#SBATCH --error=run_06_human_multiome_motifEnrichment_%j.err
+#SBATCH --job-name=run_07_human_multiome_motifEnrichment
+#SBATCH --output=run_07_human_multiome_motifEnrichment_%j.out
+#SBATCH --error=run_07_human_multiome_motifEnrichment_%j.err
 #SBATCH --partition=himem
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
-#SBATCH --mem=16G
+#SBATCH --mem=32G
 #SBATCH --time=01:30:00
 
 # Load necessary modules (adjust as needed for your system)
@@ -37,14 +37,15 @@ markersPeaks_rds <- "human_multiome_harmony_merged_malig_peak/PeakCalls/markersT
 if (!exists("markerTest")) {
     print("loading markerTest")
     if (file.exists(markersPeaks_rds)) {
-        print("previously saved markersPeaks loaded")
+        print("previously saved markersPeaks loaded:")
+        print(markersPeaks_rds)
         markerTest <- readRDS(file = markersPeaks_rds)
     } else {
         print("extracting markersPeaks")
         markerTest <- getMarkerFeatures(
             ArchRProj = proj,
             useMatrix = "PeakMatrix",
-            groupBy = "PIMO_up_status",
+            groupBy = "PIMO_up_status", # this needs to be changed based on the comparison of interest
             bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
             testMethod = "wilcoxon"
         )
@@ -72,7 +73,6 @@ if ("Motif" %in% names(proj@peakAnnotation)) {
 print("Getting peakset from ArchR project")
 pSet <- getPeakSet(ArchRProj = proj)
 pSet$name <- paste(seqnames(pSet), start(pSet), end(pSet), sep = "_")
-print(paste("Retrieved the peakset:", pSet))
 
 # get motif matches for the peakset
 print("Getting motif matches for the peakset")
@@ -84,7 +84,6 @@ matches <- matches[pSet$name]
 print("Finding motifs in CEBPA promoter region")
 gr <- GRanges(seqnames = c("chr19"), ranges = IRanges(start = c(33792929), end = c(33794030)))
 queryHits <- queryHits(findOverlaps(query = pSet, subject = gr, type = "within"))
-
 
 # Motif Enrichment in differentially Accessible Peaks
 
@@ -102,7 +101,16 @@ motifsDown <- peakAnnoEnrichment(
     cutOff = "FDR <= 0.1 & Log2FC <= -0.5"
   )
 
-# Prepare motif enrichment SE objects for plotting
+# Export SummarizedExperiment Motif enrichment results
+print("Exporting motif enrichment results")
+outDir <- here("human_multiome_harmony_merged_malig_peak/motifEnrichment/")
+dir.create(outDir, showWarnings = FALSE, recursive = TRUE)
+saveRDS(motifsUp, file = file.path(outDir, "motifsUp_PIMOup_vs_PIMOdown.rds"))
+saveRDS(motifsDown, file = file.path(outDir, "motifsDown_PIMOup_vs_PIMOdown.rds"))
+
+# Function: motif enrichment SE objects for plotting
+print("Plotting ggplot of motif enrichment results")
+
 plotMotifEnrichments <- function(motifs) {
     # Convert to data frame for ggplot
     df <- data.frame(TF = rownames(motifs), mlog10Padj = assay(motifs)[,1])
@@ -115,18 +123,40 @@ plotMotifEnrichments <- function(motifs) {
             data = df[rev(seq_len(30)), ], aes(x = rank, y = mlog10Padj, label = TF), 
             size = 1.5,
             nudge_x = 2,
+            hjust = 0,
             color = "black"
       ) + theme_ArchR() + 
       ylab("-log10(P-adj) Motif Enrichment") + 
       xlab("Rank Sorted TFs Enriched") +
-      scale_color_gradientn(colors = paletteContinuous(set = "comet"))
+      scale_colour_gradientn(colors = paletteContinuous(set = "comet"))
     return(gg)
 }
 
 ggUp <- plotMotifEnrichments(motifsUp)
-ggDoown <- plotMotifEnrichments(motifsDown)
+ggDown <- plotMotifEnrichments(motifsDown)
 
 plotPDF(ggUp, ggDown, name = "PIMOup-vs-PIMOdown-Markers-Motifs-Enriched", width = 5, height = 5, ArchRProj = proj, addDOC = TRUE)
 
+########################################################
+# Compute chromeVar Deviations
+print("Computing chromVar deviations")
+proj <- addBgdPeaks(proj, force = TRUE)
+proj <- addDeviationsMatrix(ArchRProj = proj, peakAnnotation = "Motif",
+        matrixName = "MotifMatrix", # name of the deviations matrix
+        force = TRUE
+        )
 
+# Plot Variability of Motif Deviations
+print("Plotting variability of motif deviations")
+plotVarDev <- getVarDeviations(proj, name = "MotifMatrix", plot = FALSE)
+
+print("Saving variability of motif deviations plot and data")
+saveRDS(plotVarDev, file = file.path(outDir, "chromVarDeviations_PIMOup_vs_PIMOdown.rds"))
+
+plotVarDev <- getVarDeviations(proj, name = "MotifMatrix",
+        n = 25, # label the top 25 most variable motifs
+        plot = TRUE
+        ) # set plot = TRUE to get the ggplot object
+plotPDF(plotVarDev, name = "PIMOup-vs-PIMOdown-Variable-Motif-Deviation-Scores", width = 5, height = 5, ArchRProj = proj, addDOC = TRUE)
+########################################################
 EOF
