@@ -46,11 +46,27 @@ markersTest_gr <- readRDS(
        "PIMOup_vs_PIMOdown",
        "markersTest_GR_PIMO_up_status_PIMOup_vs_PIMOdown.rds")
 )
+```
+# Load motifEnrichment Results
+Here we load the the output of the motif enrichment script done on the H4h HPC for further EDA and plotting. Specifically, the output is from the script: `run_07_human_multiome_motifEnrichment.sh`. 
 
+Some of the results are from using a different motifSet. Default is cisbp, but we also test homer, and JASPAR2020.
+```{r load motif enrichment results}
 # motifEnrichment
+
+# motifSet = cisbp
 motifsUp <- readRDS(file = here("data", "human_multiome", "motifEnrichment", "motifsUp_PIMOup_vs_PIMOdown.rds"))
 motifsDown <- readRDS(file = here("data", "human_multiome", "motifEnrichment", "motifsDown_PIMOup_vs_PIMOdown.rds"))
 chromVarDev <- readRDS(file = here("data", "human_multiome", "motifEnrichment", "chromVarDeviations_PIMOup_vs_PIMOdown.rds"))
+
+# motifSet = homer
+motifsUp_homer <- readRDS(file = here("data", "human_multiome", "motifEnrichment_homer", "motifsUp_PIMOup_vs_PIMOdown_homer.rds"))
+motifsDown_homer <- readRDS(file = here("data", "human_multiome", "motifEnrichment_homer", "motifsDown_PIMOup_vs_PIMOdown_homer.rds"))
+chromVarDev_homer <- readRDS(file = here("data", "human_multiome", "motifEnrichment_homer", "chromVarDeviations_PIMOup_vs_PIMOdown_homer.rds"))
+
+# check class of objects
+class(motifsUp) # SummarizedExperiment
+class(chromVarDev) # DFrame
 ```
 
 # Exploratory Data Analysis
@@ -153,17 +169,22 @@ markersPeak_gr[["PIMOup"]]$FDR %>% length() # 167228
 When we intersect the GRanges from the three categories, we end up with 166949 features. When the PIMOup GRanges (167228) is intersected with itself, we end up with 166949 as well, suggesting that some features are lost. It's unclear where the features went, and we also checked for NAs.
 
 # motifEnrichment
+## PIMOup_vs_PIMOdown with motifSet = cisdb
 Here we have the cisdb motif results of PIMOup_vs_PIMOdown
-```{r motif enrichment}
+```{r motif enrichment cisdb}
 motifsUp
 motifsDown
 
-plotMotifEnrichments <- function(motifs) {
-    # Convert to data frame for ggplot
+# convert the SE to df for plotting and EDA
+motifSEtoDF <- function(motifs){
+      # Convert to data frame for ggplot
     df <- data.frame(TF = rownames(motifs), mlog10Padj = assay(motifs)[,1])
     df <- df[order(df$mlog10Padj, decreasing = TRUE),]
     df$rank <- seq_len(nrow(df))
-    
+    return(df)
+}
+
+plotMotifEnrichments <- function(df) {
     gg <- ggplot(df, aes(rank, mlog10Padj, color = mlog10Padj)) + 
       geom_point(size = 1.5) +
       ggrepel::geom_label_repel(
@@ -181,15 +202,49 @@ plotMotifEnrichments <- function(motifs) {
       
     return(gg)
 }
+motifsUp.df <- motifSEtoDF(motifsUp)
+motifsDown.df <- motifSEtoDF(motifsDown)
+motifsUp_homer.df <- motifSEtoDF(motifsUp_homer)
+motifsDown_homer.df <- motifSEtoDF(motifsDown_homer)
 
-ggUp <- plotMotifEnrichments(motifsUp)
-ggDown <- plotMotifEnrichments(motifsDown)
+ggUp <- plotMotifEnrichments(motifsUp.df)
+ggDown <- plotMotifEnrichments(motifsDown.df)
+ggUp_homer <- plotMotifEnrichments(motifsUp_homer.df)
+ggDown_homer <- plotMotifEnrichments(motifsDown_homer.df)
+
 
 ggUp
 ggDown
+ggUp_homer
+ggDown_homer
 ```
+## table of top motifs
+```{r top motifs}
+# data frames
+motifsUp.df
+motifsDown.df
 
+# convert chromvar DFrame
+chromVarDev_homer.df <- as_tibble(as.data.frame(chromVarDev_homer))
 
+# motifs to check
+motifs <- c("SOX", "HIF", "ARNT", "NF1", "NFI")
+
+# function: check motifs of interest in df
+checkMotifsInterest <- function(df, motifs){
+df_sub <- df %>%
+   filter(str_detect(TF, regex(paste(motifs, collapse = "|"), ignore_case = TRUE)))
+return(df_sub) # returns subset of df
+}
+
+checkMotifsInterest(motifsUp.df, motifs)
+checkMotifsInterest(motifsDown.df, motifs)
+checkMotifsInterest(motifsUp_homer.df, motifs)
+checkMotifsInterest(motifsDown_homer.df, motifs)
+```
+Note: mlog10Padj means minus log10(adjusted p-value). For Padj < 0.05, we expect the mlog10padj value to be > 1.3.
+
+HIFs are ranked in the bottom 200s/332 from the chromVarDev_homer
 ```{r claude}
 library(SummarizedExperiment)
 library(S4Vectors)
