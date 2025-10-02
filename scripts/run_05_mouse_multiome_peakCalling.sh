@@ -92,8 +92,8 @@ for (groupBy in groupBy_list) {
   print(table(myPeakSet$peakType))
 
   # Save the peakSet gr object for easier load in the future
-  print(paste("Saved peakSet as .RData for", groupBy))
-  save(myPeakSet, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/PeakSet_gr_", groupBy, ".RData"))
+  print(paste("Saved peakSet as .rds for", groupBy))
+  saveRDS(myPeakSet, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/PeakSet_gr_", groupBy, ".rds"))
   
   # Check available matrices
   print("check available matrices")
@@ -133,8 +133,8 @@ print(paste("Get marker peaks for", groupBy, "groups"))
   )
   
 # Save the markersPeaks SE object for easier load in the future
-print(paste("Saved markersPeaks as .RData for", groupBy))
-save(markersPeaks, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_", groupBy, ".RData"))
+print(paste("Saved markersPeaks as .rds for", groupBy))
+saveRDS(markersPeaks, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_", groupBy, ".rds"))
 
 }
 # Save the project after each groupBy
