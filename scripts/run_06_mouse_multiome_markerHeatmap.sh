@@ -30,14 +30,16 @@ addArchRGenome("mm10")
 # Load the project
 proj_hyp <- loadArchRProject(path = "mouse_multiome_harmony_merged_malig_peak_subset")
 
+# path to saved markersPeaks RDS file
+markersPeaks_rds <- "mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_hybrid_pair.rds"
+
 # load marker peaks SummarizedExperiment obj if not already in memory; otherwise create it
 if (!exists("markersPeaks")) {
     print("loading markersPeaks")
-    if (file.exists("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_hybrid_pair.RData")) {
+    if (file.exists(markersPeaks_rds)) {
         print("previously saved markersPeaks loaded")
-        load(file = "mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_hybrid_pair.RData")
-    }
-    else{
+        markersPeaks <- readRDS(file = markersPeaks_rds)
+    } else {
         print("extracting markersPeaks")
         # Extract the markersPeaks 
         markersPeaks <- getMarkerFeatures(
@@ -47,6 +49,9 @@ if (!exists("markersPeaks")) {
             bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
             testMethod = "wilcoxon"
         )
+        # Save for future use
+        saveRDS(markersPeaks, file = markersPeaks_rds)
+        print(paste("Saved markersPeaks to:", markersPeaks_rds))
     }
 }
 
@@ -58,10 +63,22 @@ if (!is(markersPeaks, "SummarizedExperiment")) {
     print("markersPeaks is a valid SummarizedExperiment object.")
 }
 
-# create a folder for markerHeatmap results
-# dir.create("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/MarkerHeatmaps/")
+# Extract GR object from SE object for hybrid_pair groups (used later for MA plots in rstudio)
+print("Extracting marker peaks GR object for hybrid_pair groups")
 
-# Plot marker heatmap for Azimuth_class
+markersPeaks_GR_rds <- "mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_GR_hybrid_pair.rds"
+if (file.exists(markersPeaks_GR_rds)) {
+    print(paste("File already exists:", markersPeaks_GR_rds))
+    markersPeaks_GR <- readRDS(file = markersPeaks_GR_rds)
+} else {
+    markersPeaks_GR <- getMarkers(markersPeaks, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
+    saveRDS(markersPeaks_GR, file = markersPeaks_GR_rds)
+    print(paste("Saved markersPeaks_GR to:", markersPeaks_GR_rds))
+}
+
+print(paste("Number of marker peaks identified:", sapply(markersPeaks_GR, length)))
+
+# Plot marker heatmap for hybrid_pair
 print("Plotting marker heatmap for hybrid_pair groups")
 cutOff <- "FDR <= 0.1 & abs(Log2FC) >= 0.5"
 print(paste("Using cutOff:", cutOff))
@@ -70,6 +87,7 @@ heatmap <- plotMarkerHeatmap(
     seMarker = markersPeaks,
     cutOff = cutOff,
     limits = c(-2, 2),
+    plotLog2FC = TRUE,
     transpose = TRUE,
     returnMatrix = FALSE
 )
@@ -104,21 +122,43 @@ for (group in colnames(markersPeaks)) {
 print("All MA and Volcano plots created and saved.")
 
 # Plot marker peaks in browser tracks for genes of interest
-genes <- c("OLIG1","OLIG2")
-
-for (gene in genes) {
-print(paste("Plotting marker peaks in browser tracks for: ", gene))
+print("Plotting marker peaks in browser tracks for genes of interest")
+genes <- c("Olig1", "Olig2", "Sox2", "Sox10", "Id2", "Id3", "Vegfa")
+print(paste("Genes of interest:", paste(genes, collapse = ", ")))
 
 p <- plotBrowserTrack(
     ArchRProj = proj_hyp, 
     groupBy = "hybrid_pair", 
-    geneSymbol = gene,
-    features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE)["OPC"],
+    geneSymbol = genes,
+    features = getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
     upstream = 50000,
     downstream = 50000
 )
 
-plotPDF(p, name = paste0("markerPeaks_browserTrack-hybrid_pair_", gene), width = 5, height = 5, ArchRProj = proj_hyp, addDOC = TRUE)
-}
+plotPDF(plotList = p, 
+    name = paste0("markerPeaks_browserTrack-hybrid_pair"), 
+    ArchRProj = proj_hyp, 
+    addDOC = TRUE, 
+    width = 5, 
+    height = 5
+)
+
+# Optionally, create individual browser tracks for specific genes
+# Uncomment below if needed for detailed individual gene analysis
+# for (gene in c("Olig1", "Olig2")) {
+#     print(paste("Plotting marker peaks in browser tracks for:", gene))
+#     
+#     p <- plotBrowserTrack(
+#         ArchRProj = proj_hyp, 
+#         groupBy = "hybrid_pair", 
+#         geneSymbol = gene,
+#         features = getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
+#         upstream = 50000,
+#         downstream = 50000
+#     )
+#     
+#     plotPDF(p, name = paste0("markerPeaks_browserTrack-hybrid_pair_", gene), 
+#             width = 5, height = 5, ArchRProj = proj_hyp, addDOC = TRUE)
+# }
 
 EOF
