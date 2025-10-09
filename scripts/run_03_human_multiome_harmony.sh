@@ -105,7 +105,7 @@ for (i in seq_along(proj@reducedDims)) {
 
 # plot UMAP
 
-new_reducedDims <- setdiff(names(proj@reducedDims), original_reducedDims)
+ew_reducedDims <- setdiff(names(proj@reducedDims), original_reducedDims)
 print("Newly added reducedDims:")
 print(new_reducedDims)
 

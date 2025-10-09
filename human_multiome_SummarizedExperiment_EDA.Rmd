@@ -15,7 +15,7 @@ library(ggplot2)
 library(pheatmap)
 library(tidyverse)
 library(here)
-
+library(ComplexHeatmap)
 ```
 # Load SummarizedExperiment and GRanges Object
 Here we load the results of analysis on the cluster: ArchR::getMarkerFeatures, which returns a SE object. We also load the derived the GRanges object, which is a SimpleList using getMarkers() on the SE object. These is no threshold cutOff used here to get all the features.
@@ -67,6 +67,16 @@ chromVarDev_homer <- readRDS(file = here("data", "human_multiome", "motifEnrichm
 # check class of objects
 class(motifsUp) # SummarizedExperiment
 class(chromVarDev) # DFrame
+```
+
+```{r load custom motif enrichment results}
+# load custom enrichment (from ArchR::peakAnnoEnrichment()
+# (FDR <= 0.1 & Log2FC >= 0.5)
+# bulk_ATAC_DA_peaks
+enrichRegions <- readRDS(file = here("data", "human_multiome", "CustomMotifEnrichment", "enrichRegions_customPeaks_bulk_ATAC_DA_peaks_vs_PIMO_up_status.rds"))
+
+class(enrichRegions) # SummarizedExperiment
+
 ```
 
 # Exploratory Data Analysis
@@ -405,4 +415,81 @@ markers <- getMarkers_standalone(se, cutOff = "FDR < 1 & Log2FC > 0")
 markers[["PIMOup"]] %>% dim() # 75393     7
 markers[["PIMOup"]] %>% nrow # 75393
 sum(markers[["PIMOup"]]$FDR < 0.1)
+```
+
+# Custom Motif Enrichment
+```{r SE EDA custom motif enrichment}
+
+se_eda <- function(se){
+# Basic info about the object
+dim(se)  # dimensions (Features x samples)
+assayNames(se)  # available assay data ("Log2FC"   "Mean"     "FDR"      "Pval"     "MeanDiff" "AUC"      "MeanBGD" )
+colnames(se)  # sample names
+rownames(se)  # feature
+
+# Metadata exploration
+colData(se)  # sample metadata
+rowData(se)  # feature metadata
+metadata(se)  # experiment metadata
+}
+se_eda(enrichRegions)
+
+assay(enrichRegions, "mlog10Padj")
+```
+## ComplexHeatmap
+```{r complexheatmap}
+# Row-wise scaling function (recreated from ArchR's .rowScale)
+rowScale <- function(mat, min = 0, max = NULL) {
+  # Store original rownames and colnames
+  rn <- rownames(mat)
+  cn <- colnames(mat)
+  
+  # Calculate row-wise min and max
+  row_mins <- apply(mat, 1, min, na.rm = TRUE)
+  row_maxs <- apply(mat, 1, max, na.rm = TRUE)
+  
+  # Scale each row to 0-1 range
+  mat_scaled <- t(apply(mat, 1, function(x) {
+    row_min <- min(x, na.rm = TRUE)
+    row_max <- max(x, na.rm = TRUE)
+    
+    # Avoid division by zero
+    if (row_max == row_min) {
+      rep(0, length(x))
+    } else {
+      (x - row_min) / (row_max - row_min)
+    }
+  }))
+  
+  # Apply min/max constraints if specified
+  if (!is.null(min)) {
+    mat_scaled <- mat_scaled * (1 - min) + min
+  }
+  
+  if (!is.null(max)) {
+    mat_scaled <- mat_scaled * max
+  }
+  
+  # Restore names
+  rownames(mat_scaled) <- rn
+  colnames(mat_scaled) <- cn
+  
+  # Return list with scaled matrix and original max values
+  return(list(
+    scaled = mat_scaled,
+    max = row_maxs,
+    min = row_mins
+  ))
+}
+
+
+
+set.seed(42)
+mat <- assay(enrichRegions, "mlog10Padj")
+mat <- as.matrix(mat)
+scaled_result <- rowScale(mat, min = 0)
+mat_scaled <- scaled_result$scaled * 100  # Convert to 0-100 scale
+
+Heatmap(t(mat))
+Heatmap((mat_scaled))
 ```
