@@ -13,6 +13,7 @@
 module load R/4.4.1
 
 # Usage: sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh human_multiome_harmony
+# Usage: sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh mouse_multiome_harmony_test
 ARCHR_DIR="$1"
 export ARCHR_DIR
 echo "ARCHR_DIR is set to '$ARCHR_DIR'"
@@ -102,7 +103,8 @@ projSubset$cellNames == seurat_metadata_subset$seurat_gex_barcode
 print(paste("Are the cell names in the same order?", are_identical))
 
 # Dynamically add columns from seurat_metadata_subset to ArchR metadata
-cols_to_add <- c("hybrid_pair","Azimuth_class", "Azimuth_subclass",
+cols_to_add <- c("hybrid_pair","neftel_4_state",
+"Azimuth_class", "Azimuth_subclass",
 "Ambiguous", "PIMO_status", "PIMO_up_status") # add more column names as needed
 
 # Only keep columns that exist in seurat_metadata_subset

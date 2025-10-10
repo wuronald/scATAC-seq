@@ -9,6 +9,17 @@
 #SBATCH --mem=16G
 #SBATCH --time=00:30:00
 
+# Parse command line arguments
+# Use default groupBy if not provided
+# Example usage: sbatch scripts/run_06_mouse_multiome_markerHeatmap.sh hybrid_pair
+# Example usage: sbatch scripts/run_06_mouse_multiome_markerHeatmap.sh neftel_4_state
+# Example usage: sbatch scripts/run_06_mouse_multiome_markerHeatmap.sh PIMO_up_status
+GROUP_BY="${1:-hybrid_pair}"
+
+# Export the parameter so R can read it
+export GROUP_BY
+echo "Using groupBy: ${GROUP_BY}"
+
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
 
@@ -30,8 +41,17 @@ addArchRGenome("mm10")
 # Load the project
 proj_hyp <- loadArchRProject(path = "mouse_multiome_harmony_merged_malig_peak_subset")
 
-# path to saved markersPeaks RDS file
-markersPeaks_rds <- "mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_hybrid_pair.rds"
+# Get groupBy from environment variable
+groupBy <- Sys.getenv("GROUP_BY")
+print(paste("Using groupBy:", groupBy))
+
+# Construct path to saved markersPeaks RDS file based on groupBy
+markersPeaks_rds <- file.path(
+    "mouse_multiome_harmony_merged_malig_peak_subset",
+    "PeakCalls",
+    paste0("markersPeaks_", groupBy, ".rds")
+)
+print(paste("Using markersPeaks path:", markersPeaks_rds))
 
 # load marker peaks SummarizedExperiment obj if not already in memory; otherwise create it
 if (!exists("markersPeaks")) {
@@ -45,7 +65,7 @@ if (!exists("markersPeaks")) {
         markersPeaks <- getMarkerFeatures(
             ArchRProj = proj_hyp,
             useMatrix = "PeakMatrix",
-            groupBy = "hybrid_pair",
+            groupBy = groupBy,
             bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
             testMethod = "wilcoxon"
         )
@@ -63,10 +83,16 @@ if (!is(markersPeaks, "SummarizedExperiment")) {
     print("markersPeaks is a valid SummarizedExperiment object.")
 }
 
-# Extract GR object from SE object for hybrid_pair groups (used later for MA plots in rstudio)
-print("Extracting marker peaks GR object for hybrid_pair groups")
+# Extract GR object from SE object for (used later for MA plots in rstudio)
+print("Extracting marker peaks GR object")
 
-markersPeaks_GR_rds <- "mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_GR_hybrid_pair.rds"
+# Construct markersPeaks_GR_rds path based on groupBy
+markersPeaks_GR_rds <- file.path(
+    "mouse_multiome_harmony_merged_malig_peak_subset",
+    "PeakCalls",
+    paste0("markersPeaks_GR_", groupBy, ".rds")
+)
+
 if (file.exists(markersPeaks_GR_rds)) {
     print(paste("File already exists:", markersPeaks_GR_rds))
     markersPeaks_GR <- readRDS(file = markersPeaks_GR_rds)
@@ -78,8 +104,8 @@ if (file.exists(markersPeaks_GR_rds)) {
 
 print(paste("Number of marker peaks identified:", sapply(markersPeaks_GR, length)))
 
-# Plot marker heatmap for hybrid_pair
-print("Plotting marker heatmap for hybrid_pair groups")
+# Plot marker heatmap
+print(paste("Plotting marker heatmap for groupBy:", groupBy))
 cutOff <- "FDR <= 0.1 & abs(Log2FC) >= 0.5"
 print(paste("Using cutOff:", cutOff))
 
@@ -93,7 +119,7 @@ heatmap <- plotMarkerHeatmap(
 )
 # Save the heatmap as a PDF
 print("Saving heatmap as PDF")
-plotPDF(heatmap, name = "markerPeaks-Heatmap", width = 8, height = 6, ArchRProj = proj_hyp, addDOC = TRUE)
+plotPDF(heatmap, name = paste0("markerPeaks-Heatmap_", groupBy), width = 8, height = 6, ArchRProj = proj_hyp, addDOC = TRUE)
 
 # Plot MA plots for marker peaks
 print("Plotting MA plots for marker peaks")
@@ -117,7 +143,7 @@ for (group in colnames(markersPeaks)) {
     # Save each MA plot as a PDF
     print(paste("Saving MA plot for group:", group))
     plotPDF(pma, pvolcano, 
-    name = paste0("markerPeaks-MAplot_", group), width = 5, height = 5, ArchRProj = proj_hyp, addDOC = TRUE)
+    name = paste0("markerPeaks-MAplot_", groupBy, "_", group), width = 5, height = 5, ArchRProj = proj_hyp, addDOC = TRUE)
 }
 print("All MA and Volcano plots created and saved.")
 
@@ -128,7 +154,7 @@ print(paste("Genes of interest:", paste(genes, collapse = ", ")))
 
 p <- plotBrowserTrack(
     ArchRProj = proj_hyp, 
-    groupBy = "hybrid_pair", 
+    groupBy = groupBy, 
     geneSymbol = genes,
     features = getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
     upstream = 50000,
@@ -136,7 +162,7 @@ p <- plotBrowserTrack(
 )
 
 plotPDF(plotList = p, 
-    name = paste0("markerPeaks_browserTrack-hybrid_pair"), 
+    name = paste0("markerPeaks_browserTrack_", groupBy), 
     ArchRProj = proj_hyp, 
     addDOC = TRUE, 
     width = 5, 
@@ -150,14 +176,14 @@ plotPDF(plotList = p,
 #     
 #     p <- plotBrowserTrack(
 #         ArchRProj = proj_hyp, 
-#         groupBy = "hybrid_pair", 
+#         groupBy = groupBy, 
 #         geneSymbol = gene,
 #         features = getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
 #         upstream = 50000,
 #         downstream = 50000
 #     )
 #     
-#     plotPDF(p, name = paste0("markerPeaks_browserTrack-hybrid_pair_", gene), 
+#     plotPDF(p, name = paste0("markerPeaks_browserTrack_", groupBy, "_", gene), 
 #             width = 5, height = 5, ArchRProj = proj_hyp, addDOC = TRUE)
 # }
 

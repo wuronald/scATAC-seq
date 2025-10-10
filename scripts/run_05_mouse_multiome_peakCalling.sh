@@ -30,7 +30,7 @@ addArchRThreads(threads = 18)
 addArchRGenome("mm10")
 
 # Load the project
-proj_hyp <- loadArchRProject(path = "mouse_multiome_harmony_merged_subset")
+proj_hyp <- loadArchRProject(path = "mouse_multiome_harmony_test_merged")
 
 # subset to only malignant cells
 print("Subsetting ArchR object to only malignant cells: ")
@@ -59,8 +59,8 @@ if (exists("findMacs2")) {
 }
 
 # Set of ArchR object metadata columns to iterate over for peak calling
-groupBy_list <- c("PIMO_pos", "hybrid_pair")
-# groupBy_list <- c("hybrid_pair")
+# groupBy_list <- c("PIMO_pos", "hybrid_pair")
+groupBy_list <- c("PIMO_up_status", "hybrid_pair", "neftel_4_state")
 print(paste("GroupBy list:", paste(groupBy_list, collapse = ", ")))
 
 for (groupBy in groupBy_list) {
