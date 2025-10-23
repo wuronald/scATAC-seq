@@ -40,6 +40,8 @@ results/
 # log files
 ArchRLogs/
 .log
+# html
+*.html
 # PDF
 *.pdf
 # png

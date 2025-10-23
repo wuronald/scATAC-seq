@@ -362,14 +362,14 @@ Note: mlog10Padj means minus log10(adjusted p-value). For Padj < 0.05, we expect
 
 HIFs are ranked in the bottom 200s/332 from the chromVarDev_homer
 
-# Plot: MA Plots and Volcano
+# Plot: MA and Volcano
 
 Here we plot the marker peaks using the function implementated from ArchR
 ```{r plot MA volcano}
 plotMarkers_standalone <- function(
   seMarker = NULL,
   name = NULL,
-  cutOff = "FDR <= 0.01 & abs(Log2FC) >= 0.5",
+  cutOff = "FDR <= 0.1 & abs(Log2FC) >= 0.5",
   plotAs = "Volcano",
   point_size = 0.5,
   alpha = 0.6,
@@ -553,8 +553,7 @@ plotMarkers_standalone <- function(
 #markers[["PIMOup"]] %>% nrow # 75393
 # sum(markers[["PIMOup"]]$FDR < 0.1)
 
-# se
-
+# For PIMOup vs PIMOdown (useGroups=PIMOup, bgdGroups = PIMOdown)
 markersTest
 plotMarkers_standalone(seMarker = markersTest, name = "PIMOup", plotAs = "Volcano")
 plotMarkers_standalone(seMarker = markersTest, name = "PIMOup", plotAs = "MA")

@@ -211,7 +211,7 @@ ggDown <- plotMotifEnrichments(motifsDown)
 plotPDF(ggUp, ggDown, name = paste0(filePrefix, "-Markers-Motifs-Enriched_", motifSet), width = 5, height = 5, ArchRProj = proj, addDOC = TRUE)
 
 
-Motif Enrichment in marker peaks (non-pairwise))
+# Motif Enrichment in marker peaks (non-pairwise))
 print("Plotting heatmap of motif enrichment results in non-pairwise marker peaks")
 # enrichMotifs <- peakAnnoEnrichment(
 #     seMarker = markersPeaks,

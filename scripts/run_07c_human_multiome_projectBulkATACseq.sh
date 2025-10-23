@@ -79,6 +79,12 @@ for (reduction in available_reductions) {
     next
   }
   
+  # Skip problematic combined reduction if needed
+  if (!is.null(reduction) && !is.na(reduction) && reduction == "Harmony_LSI_Combined") {
+    cat("Temporarily skipping", reduction, "- known to cause issues\n")
+    next
+  }
+  
   # The corresponding UMAP should be "UMAP_" + reduction name
   umap_name <- paste0("UMAP_", reduction)
   
@@ -98,22 +104,31 @@ for (reduction in available_reductions) {
     }
     
     # Validate embedding exists and has proper structure
-    # if (umap_name %in% names(proj@embeddings)) {
-    #   cat("Embedding dimensions:", dim(proj@embeddings[[umap_name]]), "\n")
-      
-    #   # Check if embedding has the required components
-    #   embedding_obj <- proj@embeddings[[umap_name]]
-    #   if (is.null(embedding_obj) || nrow(embedding_obj) == 0) {
-    #     cat("WARNING: Embedding", umap_name, "is empty or NULL. Skipping...\n")
-    #     next
-    #   }
-    # } else {
-    #   cat("WARNING: Embedding", umap_name, "not accessible. Skipping...\n")
-    #   next
-    # }
+    if (umap_name %in% names(proj@embeddings)) {
+      cat("Embedding dimensions:", dim(proj@embeddings[[umap_name]]), "\n")
+    } else {
+      cat("WARNING: Embedding", umap_name, "not accessible. Skipping...\n")
+      next
+    }
+    
+    # Additional validation: check that reduction and embedding are compatible
+    cat("Checking compatibility between reduction and embedding...\n")
+    reduction_dim <- nrow(proj@reducedDims[[reduction]])
+    embedding_dim <- nrow(proj@embeddings[[umap_name]])
+    cat("Cells in reduction:", reduction_dim, "\n")
+    cat("Cells in embedding:", embedding_dim, "\n")
+    
+    if (reduction_dim == 0 || embedding_dim == 0) {
+      cat("WARNING: Empty reduction or embedding detected. Skipping...\n")
+      next
+    }
+    
+    if (reduction_dim != embedding_dim) {
+      cat("WARNING: Mismatch between reduction and embedding dimensions. Skipping...\n")
+      next
+    }
     
     # project bulk ATAC-seq to scATAC-seq
-    print("Running projectBulkATAC()...")
     bulkPro <- projectBulkATAC(
       ArchRProj = proj,
       seATAC = seBulk,
