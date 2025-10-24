@@ -334,7 +334,7 @@ motifDRametoDF <- function(DF){
 }
 # Convert Chromvar DFrame to dataframe
 chromVarDev_homer.df <- motifDRametoDF(chromVarDev_homer)
-chromVarDev.df <- motifDRametoDF(chromVarDev)
+chromVarDev.df <- motifDRametoDF(chromVarDev) # cisbp
 
 # Function: check motifs of interest in df
 checkMotifsInterest <- function(df, motifs){
