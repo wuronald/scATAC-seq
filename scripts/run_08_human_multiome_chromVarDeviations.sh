@@ -214,7 +214,7 @@ if (length(markerMotifs) == 0) {
     # Plot motif deviations on UMAP embedding
     print("Plotting motif deviations on UMAP embedding")
     p_umap <- plotEmbedding(
-        ArchRProj = proj, cd 
+        ArchRProj = proj,
         colorBy = deviationsMatrixName, 
         name = sort(markerMotifs), 
         embedding = "UMAP_Harmony_LSI_Combined",
@@ -324,5 +324,24 @@ p <- ggplot(data.frame(corGSM_MM), aes(cor, maxDelta, color = TFRegulator)) +
   )
 
 plotPDF(p, name = paste0(filePrefix, "-Positive-TF-regulators-Motifs-Enriched_", motifSet), width = 5, height = 5, ArchRProj = proj, addDOC = TRUE)
+
+# Plot UMAPS of Example Gene Expression and Groupings
+print("Plotting UMAPs of example gene expression and groupings")
+g1 <- plotEmbedding(proj, 
+colorBy = "GeneExpressionMatrix", 
+name = "VEGFA", 
+embedding = "UMAP_Harmony_LSI_Combined")
+
+g2 <- plotEmbedding(proj, 
+colorBy = "cellColData", 
+name = "PIMO_up_status", 
+embedding = "UMAP_Harmony_LSI_Combined")
+
+g3 <- plotEmbedding(proj, 
+colorBy = "cellColData", 
+name = "Sample", 
+embedding = "UMAP_Harmony_LSI_Combined")
+
+plotPDF(list(g1, g2, g3), name = paste0(filePrefix, "-Example-GeneExpression-and-Groupings_", motifSet), width = 5, height = 5, ArchRProj = proj, addDOC = TRUE)
 
 EOF

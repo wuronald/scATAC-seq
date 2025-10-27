@@ -344,8 +344,8 @@ return(df_sub) # returns subset of df
 }
 
 # motifs of interest to check
-motifs <- c("SOX", "HIF", "ARNT", "NF1", "NFI", "FOS", "JUN","AP-1")
-
+# motifs <- c("SOX", "HIF", "ARNT", "NF1", "NFI", "FOS", "JUN","AP-1")
+motifs <- c("ID1","ID2","ID3","ID4")
 # check motifs of interest
 checkMotifsInterest(motifsUp.df, motifs)
 checkMotifsInterest(motifsDown.df, motifs)
