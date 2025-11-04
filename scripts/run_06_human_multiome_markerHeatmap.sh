@@ -9,6 +9,19 @@
 #SBATCH --mem=16G
 #SBATCH --time=00:30:00
 
+# Parse command line arguments
+# First argument: GENES Default genes for plotting browser tracks
+# Example usage:
+# sbatch scripts/run_06_human_multiome_markerHeatmap.sh "HIF,ATF,FOS,JUN,AP-1,AP1,Bach"
+
+GENES="${1:-CTSB,OLIG1,OLIG2,SOX2,CD109,CD44,RND3,STMN2,NGFR,SOX10,ID1,ID2,ID3,CA9,VEGFA,SLC2A1}"  # Default genes for plotting browser tracks
+
+# Export the parameters so R can access them
+export GENES # make GENES available to R script
+
+echo "Running markerheatamp analysis with:"
+echo "  genes: ${GENES}"
+
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
 
@@ -20,6 +33,12 @@ library(ArchR)
 library(BSgenome.Hsapiens.UCSC.hg38)
 library(here)
 set.seed(1)
+
+# Get parameters from environment variables
+
+genes <- Sys.getenv("GENES", unset = "CTSB,OLIG1,OLIG2,SOX2,CD109,CD44,RND3,STMN2,NGFR,SOX10,ID1,ID2,ID3,CA9,VEGFA,SLC2A1")
+# Convert comma-separated string to vector
+genes <- unlist(strsplit(genes, ","))
 
 # Set the number of threads for ArchR
 addArchRThreads(threads = 18)
@@ -123,9 +142,7 @@ geneAnno <- getGeneAnnotation(proj_hyp)
 
 # Plot marker peaks in browser tracks for genes of interest:
 print("Plotting marker peaks in browser tracks for genes of interest")
-genes <- c("CTSB","OLIG1", "OLIG2",
-"SOX2", "CD109", "CD44", "RND3", "STMN2", "NGFR", "SOX10", 
-"ID2", "ID3", "CA9", "VEGFA", "SLC2A1") 
+# genes <- c("CTSB","OLIG1", "OLIG2","SOX2", "CD109", "CD44", "RND3", "STMN2", "NGFR", "SOX10","ID2", "ID3", "CA9", "VEGFA", "SLC2A1") 
 print(paste("Genes of interest:", paste(genes, collapse = ", ")))
 
 p <- plotBrowserTrack(
