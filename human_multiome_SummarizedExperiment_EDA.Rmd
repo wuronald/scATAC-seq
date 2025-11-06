@@ -304,7 +304,8 @@ ggDown_homer +
           subtitle = "top 15 motifsDown homer")
 
 # mouse multiome (move later)
-ggup_ms_homer
+ggup_ms_homer +
+  ggtitle("mouse multiome")
 
 # highlight motifs of interest
 highlight_TF <- c("HIF1A","ARNT", "SOX2", "SOX3", "SOX4", 
@@ -659,6 +660,8 @@ print(i)
 ```
 
 # Motif Compare: bulk ATAC-seq vs multiome
+
+First, let's export the homer motifs from the multiome. We will reload this and load the bulk ATAC-seq homer motif results.
 ```{r export multiome homer motifs, eval = FALSE}
 write_csv(motifsUp_homer.df, here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsUP.csv"),
                       col_names=TRUE)
@@ -666,6 +669,7 @@ write_csv(motifsDown_homer.df, here("data","bulkATAC","2025_10-17_human_multiome
                       col_names=TRUE)
 ```
 
+Here we load the bulk atac-seq results from G523, focusing on the comparison of N_BMP vs H_BMP. Motifs enriched in each of those two conditions are identified.
 ```{r motif compare}
 # from bulk N_BMP_vs_H_BMP
 motifs_df <- read_csv(here("data","bulkATAC","2021-10-09_G523_N_BMP_vs_H_BMP_FDR_HOMER_motifs_bubbleplot.csv"),
@@ -689,9 +693,11 @@ df1_cleaned <- motifsUp_homer.df %>%
       # "AP.1.bZIP_1" -> "AP.1.bZIP"
       str_remove("_\\d+$") %>%
       
-      # Step 2: Handle the specific ".T.box" edge case first.
+      # Step 2: Handle the specific edge cases first.
       # "Brachyury.T.box" -> "Brachyury"
+      # "Brn2-POU" -> "Brn2"
       str_remove("\\.T\\.box$") %>%
+      str_remove("-Homeobox$") %>%
       
       # Step 3: Now, handle the general case by removing the last remaining 
       # motif identifier (e.g., .bZIP, .DR1).
@@ -706,7 +712,27 @@ df1_cleaned <- motifsUp_homer.df %>%
       
       # Step 5: Final cleanup. Remove any trailing hyphens.
       # "RXR-NR--" -> "RXR-NR"
-      str_remove("-+$")
+      str_remove("-+$") %>%
+    
+      # Step 6: Additional edge cases:
+      str_remove("-Paired$") %>%
+      str_remove("-NR$") %>%
+      str_remove("-Forkhead$") %>%
+      str_remove("-Homeobox$") %>%
+      str_remove("-POU$") %>%
+      str_replace_all("Arnt-Ahr","Arnt:Ahr") %>%
+      str_replace_all("bZIP-IRF-bZIP","bZIP:IRF") %>%
+      str_replace_all("CTCF-SatelliteElement-Zf", "CTCF-SatelliteElement") %>%
+      str_replace_all("EWS-FLI1-fusion","EWS:FLI1-fusion") %>% 
+      str_replace_all("Fox-Ebox", "Fox:Ebox") %>%
+      str_replace_all("GRE-NR","GRE") %>%
+      str_replace_all("Pit1-1bp","Pit1+1bp") %>%
+      str_replace_all("Tlx","Tlx?") %>%
+      str_replace_all("OCT-OCT","OCT:OCT") %>%
+      str_replace_all("RAR-RXR","RAR:RXR") %>%
+      str_replace_all("ZNF143-STAF","ZNF143|STAF") %>%
+      str_replace_all("OCT4-SOX2-TCF-NANOG-POU-Homeobox","OCT4-SOX2-TCF-NANOG") %>%
+      str_replace_all("(Nkx\\d+)-(\\d+)", "\\1.\\2") # for Nkxn-n, where n is any number
   )
 
 df2_cleaned <- motifs_df_H_BMP %>%
@@ -719,6 +745,9 @@ df3_cleaned <- motifs_df_N_BMP %>%
 common_tfs_1 <- intersect(df1_cleaned$TF_cleaned, df2_cleaned$TF_cleaned)
 # multiome motifsUP vs motifs_N_BMP
 common_tfs_2 <- intersect(df1_cleaned$TF_cleaned, df3_cleaned$TF_cleaned)
+
+# check for mismatched/ambiguous motifs between datasets
+motifs_df$TF[!motifs_df$TF %in% df1_cleaned$TF_cleaned] %>% sort
 
 # Updated plotting function
 plotMotifEnrichments_new <- function(df, common_tfs_vector, show_labels = TRUE) { #<-- New argument here
@@ -759,10 +788,12 @@ gg_compare1 <-plotMotifEnrichments(df1_cleaned) # [1] 332   6
 gg_compare2 <-plotMotifEnrichments_new(df1_cleaned, common_tfs_1)
 gg_compare3 <-plotMotifEnrichments_new(df1_cleaned, common_tfs_1,FALSE)
 
+```
+
+```{r export bulk vs multiome motif comparisons, eval = FALSE}
 pdf(here("Plots","2025-10-17_human_multiome_PIMOup_vs_PIMOdown_motifUP_vs_G523_H_BMP_vs_N_BMP_motif_ranking_bulk.pdf"))
 gg_compare1
 gg_compare2
 gg_compare3
 dev.off()
-
 ```
