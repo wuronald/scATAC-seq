@@ -670,7 +670,7 @@ write_csv(motifsDown_homer.df, here("data","bulkATAC","2025_10-17_human_multiome
 ```
 
 Here we load the bulk atac-seq results from G523, focusing on the comparison of N_BMP vs H_BMP. Motifs enriched in each of those two conditions are identified.
-```{r motif compare}
+```{r motif compare plotting functions}
 # from bulk N_BMP_vs_H_BMP
 motifs_df <- read_csv(here("data","bulkATAC","2021-10-09_G523_N_BMP_vs_H_BMP_FDR_HOMER_motifs_bubbleplot.csv"),
                       col_names=TRUE)
@@ -685,8 +685,9 @@ motifs_df_N_BMP <- motifs_df %>%
 motifsUp_homer.df
 motifsDown_homer.df
 
-# additional cleaning
-df1_cleaned <- motifsUp_homer.df %>%
+# Function for additional cleaning of motifs (homer multiome syntax needs to match homer bulk-ATAC-seq)
+homer_motif_cleaning <- function(df){
+  df_cleaned <- df %>%
   mutate(
     TF_cleaned = TF %>%
       # Step 1: Remove the numerical suffix (e.g., _251)
@@ -734,33 +735,49 @@ df1_cleaned <- motifsUp_homer.df %>%
       str_replace_all("OCT4-SOX2-TCF-NANOG-POU-Homeobox","OCT4-SOX2-TCF-NANOG") %>%
       str_replace_all("(Nkx\\d+)-(\\d+)", "\\1.\\2") # for Nkxn-n, where n is any number
   )
+return (df_cleaned)    
+}
 
+df1_cleaned <- homer_motif_cleaning(motifsUp_homer.df)
 df2_cleaned <- motifs_df_H_BMP %>%
   mutate(TF_cleaned = str_extract(TF, "[^|]+"))
-
 df3_cleaned <- motifs_df_N_BMP %>%
   mutate(TF_cleaned = str_extract(TF, "[^|]+"))
+df4_cleaned <- homer_motif_cleaning(motifsDown_homer.df)
 
-# multiome motifsUP vs motifs_H_BMP
+# human multiome motifsUP vs G523 motifs_H_BMP enriched
 common_tfs_1 <- intersect(df1_cleaned$TF_cleaned, df2_cleaned$TF_cleaned)
-# multiome motifsUP vs motifs_N_BMP
+# human multiome motifsUP vs G523 motifs_N_BMP enriched
 common_tfs_2 <- intersect(df1_cleaned$TF_cleaned, df3_cleaned$TF_cleaned)
 
-# check for mismatched/ambiguous motifs between datasets
+# human multiome motifsDown vs G523 motifs_H_BMP enriched
+common_tfs_3 <- intersect(df4_cleaned$TF_cleaned, df2_cleaned$TF_cleaned)
+# human multiome motifsDown vs G523 motifs_N_BMP enriched
+common_tfs_4 <- intersect(df4_cleaned$TF_cleaned, df3_cleaned$TF_cleaned)
+
+# sanity check for mismatched/ambiguous motifs between datasets
 motifs_df$TF[!motifs_df$TF %in% df1_cleaned$TF_cleaned] %>% sort
 
 # Updated plotting function
-plotMotifEnrichments_new <- function(df, common_tfs_vector, show_labels = TRUE) { #<-- New argument here
-  
+# show_labels_qty shows the top 25 motifs (default), based on the rank column
+plotMotifEnrichments_new <- function(df, common_tfs_vector, show_labels = TRUE, show_labels_qty = 25) {
+  padj_threshold = 0.05 # threshold for y-axis horizontal line
   # 1. Create a new column to flag common TFs
   df <- df %>%
     mutate(is_common = TF_cleaned %in% common_tfs_vector)
   
+  num_is_common <- df %>% pull(is_common) %>% sum(na.rm = TRUE)
+  print(paste0("The number of motis in common is:", num_is_common, " from a total of ",nrow(df)," motifs"))
+  
+  if(num_is_common > show_labels_qty){
+    print(paste0("Number of common motifs exceeds the number to requested to label:", show_labels_qty))
+  }
+  
   # 2. Create the base plot
   gg <- ggplot(df, aes(x = rank, y = mlog10Padj)) + 
-    geom_point(aes(color = is_common, shape = is_common), size = 2.5, alpha = 0.8) +
+    geom_point(aes(color = is_common, shape = is_common), size = 2, alpha = 0.8) +
     scale_color_manual(name = "Common TF", values = c(`TRUE` = "red", `FALSE` = "grey50")) +
-    scale_shape_manual(name = "Common TF", values = c(`TRUE` = 17, `FALSE` = 16)) +
+    scale_shape_manual(name = "Common TF", values = c(`TRUE` = 16, `FALSE` = 16)) +
     ylab("-log10(P-adj) Motif Enrichment") + 
     xlab("Rank Sorted TFs Enriched") +
     theme_minimal() +
@@ -768,32 +785,192 @@ plotMotifEnrichments_new <- function(df, common_tfs_vector, show_labels = TRUE) 
   
   # 3. Conditionally add labels
   # This 'if' statement checks if show_labels is TRUE
+  
   if (show_labels) {
+    ylimit <- round(max(df$mlog10Padj))
+    
     gg <- gg + geom_label_repel(
-      data = filter(df, is_common),
+      data = filter(df, is_common) %>% slice_head(n = show_labels_qty),
       aes(label = TF_cleaned),
       size = 3,
       force = 10,
       max.overlaps = Inf,
       color = "black",
       segment.color = "grey50",
-      nudge_y = 5
+      xlim = c(100, Inf),
+      ylim = c(50, ylimit),
+      nudge_x = 5,
+      nudge_y = 10
     )
   }
   
   return(gg)
 }
+```
 
+```{r plotting}
 gg_compare1 <-plotMotifEnrichments(df1_cleaned) # [1] 332   6
 gg_compare2 <-plotMotifEnrichments_new(df1_cleaned, common_tfs_1)
 gg_compare3 <-plotMotifEnrichments_new(df1_cleaned, common_tfs_1,FALSE)
+gg_compare4 <-plotMotifEnrichments_new(df1_cleaned, common_tfs_2)
+gg_compare5 <-plotMotifEnrichments_new(df1_cleaned, common_tfs_2,FALSE)
 
+# MotifsUP plots
+gg_compare1 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown")
+gg_compare2 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "H_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare3 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "H_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare4 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "N_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare5 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "N_BMP highlighted from G523 H_BMP_vs_N_BMP")
 ```
-
-```{r export bulk vs multiome motif comparisons, eval = FALSE}
+## Export PDFs
+```{r export multiome vs bulk-ATAC motif comparisons, eval = FALSE}
 pdf(here("Plots","2025-10-17_human_multiome_PIMOup_vs_PIMOdown_motifUP_vs_G523_H_BMP_vs_N_BMP_motif_ranking_bulk.pdf"))
 gg_compare1
 gg_compare2
 gg_compare3
 dev.off()
+
+pdf(here("Plots","2025-10-17_human_multiome_PIMOup_vs_PIMOdown_motifDown_vs_G523_H_BMP_vs_N_BMP_motif_ranking_bulk.pdf"))
+
+dev.off()
+
 ```
+## Automated Motif Compare Report
+
+```{r motif compare report}
+# human multiome
+motifsUp_homer.df
+motifsDown_homer.df
+# Load motif bubble plot.csv
+motifs_df <- read_csv(here("data","bulkATAC","2021-10-09_G523_N_BMP_vs_H_BMP_FDR_HOMER_motifs_bubbleplot.csv"),
+                      col_names=TRUE)
+motifs_df2 <- read_csv(here("data","bulkATAC","2021-04-17_G523_N_VEH_vs_H_VEH_FDR_HOMER_motifs_bubbleplot.csv"),
+                      col_names=TRUE)
+motifs_df3 <- read_csv(here("data","bulkATAC","2021-10-10_2021-10-08_G523_N_VEH_vs_N_BMP_FDR_HOMER_motifs_bubbleplot.csv"),
+                      col_names=TRUE)
+
+motifs_df_H_BMP <- motifs_df %>%
+  filter(dataset == "knownmotif_H_BMP_deseq2") # deseq2 was used in thesis
+
+motifs_df_N_BMP <- motifs_df %>%
+  filter(dataset == "knownmotif_N_BMP_deseq2") # deseq2 was used in thesis
+
+motifs_df2_H_VEH <- motifs_df2 %>%
+  filter(dataset == "knownmotif_H_VEH_deseq2") # deseq2 was used in thesis
+
+motifs_df2_N_VEH <- motifs_df2 %>%
+  filter(dataset == "knownmotif_N_VEH_deseq2") # deseq2 was used in thesis
+
+motifs_df3_N_BMP <- motifs_df3 %>%
+  filter(dataset == "knownmotif_N_BMP_deseq2") # deseq2 was used in thesis
+
+motifs_df3_N_VEH <- motifs_df3 %>%
+  filter(dataset == "knownmotif_N_VEH_deseq2") # deseq2 was used in thesis
+
+# Function
+# multiome_df dataframe with human multiome homer motif results 
+# gsc_motif_df_1
+# gsc_motif_df_2
+motifCompareReport <- function(multiome_motif_df, gsc_motif_df_1, gsc_motif_df_2,
+                               gsc_title1="", gsc_title2="", title="Ranked Motif Plot", subtitle=""){
+  # clean multiome motifs
+  multiome_motif_df <- homer_motif_cleaning(multiome_motif_df)
+  # clean GSC motifs
+  gsc_motif_df_1 <- gsc_motif_df_1 %>% mutate(TF_cleaned = str_extract(TF, "[^|]+"))
+  gsc_motif_df_2 <- gsc_motif_df_2 %>% mutate(TF_cleaned = str_extract(TF, "[^|]+"))
+  
+  # determine motifs in common for each GSC comparison
+  common_tfs_1 <- intersect(multiome_motif_df$TF_cleaned, gsc_motif_df_1$TF_cleaned)
+  common_tfs_2 <- intersect(multiome_motif_df$TF_cleaned, gsc_motif_df_2$TF_cleaned)
+  
+  # Make plots
+  # 1. No labels
+  p1 <- plotMotifEnrichments_new(multiome_motif_df, common_tfs_1, show_labels = FALSE)
+  p2 <- plotMotifEnrichments_new(multiome_motif_df, common_tfs_2, show_labels = FALSE)
+  # 2. Show labels (default)
+  p3 <- plotMotifEnrichments_new(multiome_motif_df, common_tfs_1, show_labels = TRUE)
+  p4 <- plotMotifEnrichments_new(multiome_motif_df, common_tfs_2, show_labels = TRUE)
+  # 3. custom label amount
+  return(list(
+    p1 + ggtitle(title, subtitle = paste(gsc_title1, subtitle)),
+    p2 + ggtitle(title, subtitle = paste(gsc_title2, subtitle)),
+    p3 + ggtitle(title, subtitle = paste(gsc_title1, subtitle)),
+    p4 + ggtitle(title, subtitle = paste(gsc_title2, subtitle))
+  ))
+}
+
+# Run reports function
+# 1. H_BMP_vs_N_BMP_deseq2
+motifCompareReport(motifsUp_homer.df, motifs_df_H_BMP, motifs_df_N_BMP, gsc_title1 = "H_BMP", gsc_title2 = "N_BMP",
+                   title="Human Multiome: MotifsUP in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 H_BMP_vs_N_BMP_deseq2")
+motifCompareReport(motifsDown_homer.df, motifs_df_H_BMP, motifs_df_N_BMP, gsc_title1 = "H_BMP", gsc_title2 = "N_BMP",
+                   title="Human Multiome: MotifsDown in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 H_BMP_vs_N_BMP_deseq2")
+# 2. N_VEH_vs_H_VEH_deseq2
+motifCompareReport(motifsUp_homer.df, motifs_df2_H_VEH, motifs_df2_N_VEH, gsc_title1 = "H_VEH", gsc_title2 = "N_VEH",
+                   title="Human Multiome: MotifsUP in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 H_VEH_vs_N_VEH_deseq2")
+motifCompareReport(motifsDown_homer.df, motifs_df2_H_VEH, motifs_df2_N_VEH, gsc_title1 = "H_VEH", gsc_title2 = "N_VEH",
+                   title="Human Multiome: MotifsDown in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 H_VEH_vs_N_VEH_deseq2")
+# 3. N_VEH_vs_N_BMP_deseq2
+motifCompareReport(motifsUp_homer.df, motifs_df3_N_BMP, motifs_df3_N_VEH, gsc_title1 = "N_BMP", gsc_title2 = "N_VEH",
+                   title="Human Multiome: MotifsUP in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 N_BMP_vs_N_VEH_deseq2")
+motifCompareReport(motifsDown_homer.df, motifs_df3_N_BMP, motifs_df3_N_VEH, gsc_title1 = "N_BMP", gsc_title2 = "N_VEH",
+                   title="Human Multiome: MotifsDown in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 N_BMP_vs_N_VEH_deseq2")
+```
+
+### export reports 
+
+```{r export reports, eval = FALSE}
+pdf(here("Plots","2025-11-14_human_multiome_PIMOup_vs_PIMOdown_motifs_vs_G523_motifs_motif_ranking_bulk.pdf"))
+# 1. H_BMP_vs_N_BMP_deseq2
+motifCompareReport(motifsUp_homer.df, motifs_df_H_BMP, motifs_df_N_BMP, gsc_title1 = "H_BMP", gsc_title2 = "N_BMP",
+                   title="Human Multiome: MotifsUP in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 H_BMP_vs_N_BMP_deseq2")
+motifCompareReport(motifsDown_homer.df, motifs_df_H_BMP, motifs_df_N_BMP, gsc_title1 = "H_BMP", gsc_title2 = "N_BMP",
+                   title="Human Multiome: MotifsDown in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 H_BMP_vs_N_BMP_deseq2")
+# 2. N_VEH_vs_H_VEH_deseq2
+motifCompareReport(motifsUp_homer.df, motifs_df2_H_VEH, motifs_df2_N_VEH, gsc_title1 = "H_VEH", gsc_title2 = "N_VEH",
+                   title="Human Multiome: MotifsUP in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 H_VEH_vs_N_VEH_deseq2")
+motifCompareReport(motifsDown_homer.df, motifs_df2_H_VEH, motifs_df2_N_VEH, gsc_title1 = "H_VEH", gsc_title2 = "N_VEH",
+                   title="Human Multiome: MotifsDown in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 H_VEH_vs_N_VEH_deseq2")
+# 3. N_VEH_vs_N_BMP_deseq2
+motifCompareReport(motifsUp_homer.df, motifs_df3_N_BMP, motifs_df3_N_VEH, gsc_title1 = "N_BMP", gsc_title2 = "N_VEH",
+                   title="Human Multiome: MotifsUP in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 N_BMP_vs_N_VEH_deseq2")
+motifCompareReport(motifsDown_homer.df, motifs_df3_N_BMP, motifs_df3_N_VEH, gsc_title1 = "N_BMP", gsc_title2 = "N_VEH",
+                   title="Human Multiome: MotifsDown in PIMOup vs PIMOdown", 
+                   subtitle="highlighted from G523 N_BMP_vs_N_VEH_deseq2")
+dev.off()
+
+```
+
+# check h5 file integrity
+```{r check h5 files}
+library(Seurat)
+library(Signac)
+counts1 <- Read10X_h5(
+  here("data","Gaiti_multiome", "pimo66","filtered_feature_bc_matrix.h5")
+)
+
+counts2 <- Read10X_h5(
+  here("data","Gaiti_multiome", "filtered_feature_bc_matrix.h5")
+)
+
+counts3 <- Read10X_h5(
+  here("data","Gaiti_multiome", "GSM8820702_6419_A_gene_expression_filtered_feature_bc_matrix.h5")
+)
+
+
+```
+
+Here we compare the original PIMO .h5 file versus the ones we generated from barcodes, matrix, and features.tsv.gz using dropletutils.
+
+The original PIMO .h5 shows a warning: "Genome matrix has multiple modalities, returning a list of matrices for this genome", thus we should mimic this behavior.

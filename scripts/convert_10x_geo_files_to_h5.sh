@@ -54,11 +54,14 @@ samples <- c(
 total_samples <- length(samples)
 current <- 0
 
-cat("Starting processing of", total_samples, "samples...\n")
+cat("Converting 10X matrices to HDF5 format for ArchR...\n")
 cat("Base directory:", base_dir, "\n\n")
 
+# Vector to store HDF5 file paths for ArchR import
+h5_files <- c()
+
 # Loop through each sample
-for (sample in samples) {
+for (sample in samples[1]) {
     current <- current + 1
     
     cat(sprintf("[%d/%d] Processing %s...\n", current, total_samples, sample))
@@ -72,7 +75,7 @@ for (sample in samples) {
         next
     }
     
-    # Check if required files exist with sample prefix
+    # Original files with sample prefix
     original_files <- c(
         barcodes = file.path(input_dir, paste0(sample, "_barcodes.tsv.gz")),
         features = file.path(input_dir, paste0(sample, "_features.tsv.gz")),
@@ -89,7 +92,7 @@ for (sample in samples) {
         next
     }
     
-    # Create symbolic links with standard 10X names
+    # Standard 10X names (create symlinks)
     standard_files <- c(
         barcodes = file.path(input_dir, "barcodes.tsv.gz"),
         features = file.path(input_dir, "features.tsv.gz"),
@@ -98,70 +101,83 @@ for (sample in samples) {
     
     cat("  Creating symbolic links...\n")
     for (i in seq_along(original_files)) {
-        # Remove existing symlink if it exists
         if (file.exists(standard_files[i])) {
             file.remove(standard_files[i])
         }
-        # Create symlink
         file.symlink(basename(original_files[i]), standard_files[i])
     }
     
-    # Try to read and process the matrix
+    # Try to read and convert the matrix
     tryCatch({
         cat("  Reading 10X matrix...\n")
-        filter_matrix <- Read10X(input_dir)
-        
-        # Check if Read10X returned a list (multimodal data)
-        if (is.list(filter_matrix) && !is.data.frame(filter_matrix)) {
-            cat("  Detected multimodal data with", length(filter_matrix), "modalities\n")
-            # Extract names of modalities
-            modality_names <- names(filter_matrix)
-            cat("  Modalities found:", paste(modality_names, collapse=", "), "\n")
+        data_10x <- Read10X(input_dir)
+        print(paste0("the 10x matrix is of class: ", class(data_10x)))
+
+        # Check if it's multimodal and extract Gene Expression
+        if (is.list(data_10x) && !is.data.frame(data_10x)) {
+            cat("  Detected multimodal data\n")
             
-            # Process each modality separately
-            for (modality in modality_names) {
-                cat("  Processing modality:", modality, "\n")
-                
-                modal_matrix <- filter_matrix[[modality]]
-                # Clean modality name for filename (replace spaces with underscores, make lowercase)
-                clean_modality <- tolower(gsub(" ", "_", modality))
-                output_h5 <- file.path(input_dir, paste0(sample, "_", clean_modality, "_filtered_feature_bc_matrix.h5"))
-                
-                cat("  Writing HDF5 file for", modality, "...\n")
-                write10xCounts(
-                    output_h5,
-                    modal_matrix,
-                    type = "HDF5",
-                    genome = "mm10",
-                    version = "3",
-                    overwrite = TRUE,
-                    gene.id = rownames(modal_matrix),
-                    gene.symbol = rownames(modal_matrix)
-                )
-                
-                cat("  ✓ Success! Output:", basename(output_h5), "\n")
+            if ("Gene Expression" %in% names(data_10x)) {
+                cat("  Extracting 'Gene Expression' modality...\n")
+                gene_expr_matrix <- data_10x[["Gene Expression"]]
+                cat("  Extracting 'Peaks' modality...\n")
+                peaks_matrix <- data_10x[["Peaks"]]
+            } else {
+                cat("  ✗ 'Gene Expression' modality not found\n")
+                cat("  Available modalities:", paste(names(data_10x), collapse=", "), "\n\n")
+                next
             }
         } else {
-            # Single modality data
-            output_h5 <- file.path(input_dir, paste0(sample, "_filtered_feature_bc_matrix.h5"))
-            
-            cat("  Writing HDF5 file...\n")
-            write10xCounts(
-                output_h5,
-                filter_matrix,
-                type = "HDF5",
-                genome = "mm10",
-                version = "3",
-                overwrite = TRUE,
-                gene.id = rownames(filter_matrix),
-                gene.symbol = rownames(filter_matrix)
-            )
-            
-            cat("  ✓ Success! Output:", basename(output_h5), "\n")
+            gene_expr_matrix <- data_10x
         }
+
+        # Combine gene_expr and peaks matrices
+        combined_matrix <- rbind(gene_expr_matrix, peaks_matrix)
+        combined_ids <- c(
+                        rownames(gene_expr_matrix),
+                        rownames(peaks_matrix)
+                        )
+
+        combined_symbols <- c(
+                        rownames(gene_expr_matrix), # Or a vector of gene symbols if you have them
+                        rownames(peaks_matrix)
+                        )
+        feature_types <- c(
+                            rep("Gene Expression", nrow(gene_expr_matrix)),
+                            rep("Peaks", nrow(peaks_matrix))
+                            )
+        
+        # Write HDF5 with gene.type specified as "Gene Expression"
+        cat("  Writing HDF5 file with proper feature_type annotation...\n")
+        output_h5 <- file.path(input_dir, "filtered_feature_bc_matrix.h5")
+        
+        # write10xCounts(
+        #     path = output_h5,
+        #     x = gene_expr_matrix,
+        #     type = "HDF5",
+        #     genome = "hg38",
+        #     version = "3",
+        #     overwrite = TRUE,
+        #     gene.type = rep("Gene Expression", nrow(gene_expr_matrix)),
+        #     gene.id = rownames(gene_expr_matrix),
+        #     gene.symbol = rownames(gene_expr_matrix)
+        # )
+        write10xCounts(
+        path = output_h5,
+        x = combined_matrix,
+        type = "HDF5",
+        genome = "hg38",
+        version = "3",
+        overwrite = TRUE,
+        gene.type = feature_types,
+        gene.id = combined_ids,
+        gene.symbol = combined_symbols
+        )
+        
+        cat("  ✓ Success! Output:", output_h5, "\n")
+        h5_files <- c(h5_files, output_h5)
         
         # Clean up symbolic links
-        cat("  Cleaning up symbolic links...\n")
         for (link_file in standard_files) {
             if (file.exists(link_file)) {
                 file.remove(link_file)
@@ -181,5 +197,31 @@ for (sample in samples) {
     cat("\n")
 }
 
-cat("Processing complete!\n")
+cat("HDF5 conversion complete!\n")
+cat(sprintf("Successfully created %d HDF5 files\n\n", length(h5_files)))
+
+# Now import into ArchR
+if (length(h5_files) > 0) {
+    cat("Starting ArchR import...\n\n")
+    
+    # Name the files by sample
+    names(h5_files) <- basename(dirname(h5_files))
+    
+    # Import the feature matrices using ArchR
+    ArrowFiles <- import10xFeatureMatrix(
+        input = h5_files,
+        names = names(h5_files),
+        featureType = "Gene Expression"
+    )
+    
+    cat("\n✓ ArchR import complete!\n")
+    cat("Arrow files created:\n")
+    for (af in ArrowFiles) {
+        cat("  -", af, "\n")
+    }
+} else {
+    cat("✗ No HDF5 files were created successfully. Cannot import to ArchR.\n")
+}
+
+cat("\nDone!\n")
 EOF
