@@ -61,7 +61,7 @@ cat("Base directory:", base_dir, "\n\n")
 h5_files <- c()
 
 # Loop through each sample
-for (sample in samples[1]) {
+for (sample in samples) {
     current <- current + 1
     
     cat(sprintf("[%d/%d] Processing %s...\n", current, total_samples, sample))
