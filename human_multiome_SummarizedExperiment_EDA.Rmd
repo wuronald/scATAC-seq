@@ -973,4 +973,18 @@ counts3 <- Read10X_h5(
 
 Here we compare the original PIMO .h5 file versus the ones we generated from barcodes, matrix, and features.tsv.gz using dropletutils.
 
-The original PIMO .h5 shows a warning: "Genome matrix has multiple modalities, returning a list of matrices for this genome", thus we should mimic this behavior.
+The original PIMO .h5 shows a warning, but not the others: `Genome matrix has multiple modalities, returning a list of matrices for this genome`, thus we should mimic this behavior.
+
+```{r}
+class(counts1) # list
+counts1
+
+class(counts2) # #[1] "dgCMatrix"
+
+counts2
+
+class(counts3)
+counts3
+
+library(DropletUtils)
+```

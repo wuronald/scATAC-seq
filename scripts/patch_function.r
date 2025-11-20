@@ -65,8 +65,8 @@ patch_import10x_function <- function(package_name = "ArchR") {
     
     # Interval processing (keeping original logic)
     if("interval" %in% colnames(features10x)){
-      idxNA <- which(features10x$interval=="NA")
-      
+      # idxNA <- which(features10x$interval=="NA")
+      idxNA <- which(is.na(features10x$interval) | features10x$interval == "NA")
       if(length(idxNA) > 0){
         if(!is.null(ranges) & is(ranges, "GRanges")){
           idx1 <- paste0(GenomicRanges::seqnames(ranges)) %in% c(1:22, "X", "Y", "MT")

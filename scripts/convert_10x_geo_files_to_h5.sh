@@ -162,18 +162,35 @@ for (sample in samples) {
         #     gene.id = rownames(gene_expr_matrix),
         #     gene.symbol = rownames(gene_expr_matrix)
         # )
-        write10xCounts(
+        # write10xCounts(
+        # path = output_h5,
+        # x = combined_matrix,
+        # type = "HDF5",
+        # genome = "hg38",
+        # version = "3",
+        # overwrite = TRUE,
+        # gene.type = feature_types,
+        # gene.id = combined_ids,
+        # gene.symbol = combined_symbols
+        # )
+
+        # Source the script
+        source("~/ArchR/scripts/write10x_with_intervals.R")
+
+        # Example 1: Human data (hg38)
+        gene_ranges <- get_gene_ranges("hg38")
+
+        print("Write 10x counts with intervals for hg38")
+        write10xCounts_with_intervals(
         path = output_h5,
-        x = combined_matrix,
-        type = "HDF5",
-        genome = "hg38",
-        version = "3",
-        overwrite = TRUE,
-        gene.type = feature_types,
+        counts = combined_matrix,
         gene.id = combined_ids,
-        gene.symbol = combined_symbols
-        )
-        
+        gene.symbol = combined_symbols,
+        barcodes = colnames(combined_matrix),
+        genome = "hg38",
+        gene.ranges = gene_ranges
+        )    
+
         cat("  ✓ Success! Output:", output_h5, "\n")
         h5_files <- c(h5_files, output_h5)
         

@@ -223,7 +223,7 @@ print("importing scRNA data")
 seRNA <- import10xFeatureMatrix(
   input = rnaFiles,
   names = names(rnaFiles),
-  #features = genes(EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86),
+  force = TRUE,
   strictMatch = TRUE
 )
 
