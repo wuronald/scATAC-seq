@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
 #SBATCH --mem=60G
-#SBATCH --time=04:00:00
+#SBATCH --time=10:00:00
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
@@ -133,6 +133,9 @@ projMulti1 <- ArchRProject(
   outputDirectory = "Gaiti_multiome",
   copyArrows = TRUE #This is recommended so that you maintain an unaltered copy for later usage.
 )
+# add doublet scores
+print("Adding doublet scores to ArchR Project")
+projMulti1 <- addDoubletScores(projMulti1, force = TRUE)
 
 # show available matrices for the project
 print("Available matrices in the ArchR Project:") 
@@ -214,17 +217,17 @@ getAvailableMatrices(projMulti1) #  "GeneScoreMatrix" "TileMatrix"
 print(paste0("Current working directory:",getwd() ))
 
 # Apply the patch
-print("Applying patch to import10xFeatureMatrix function")
-source("scripts/patch_function.r")
-patch_import10x_function("ArchR")
+#print("Applying patch to import10xFeatureMatrix function")
+#source("scripts/patch_function.r")
+#patch_import10x_function("ArchR")
 
 # import rna data
 print("importing scRNA data")
 seRNA <- import10xFeatureMatrix(
   input = rnaFiles,
   names = names(rnaFiles),
-  force = TRUE,
-  strictMatch = TRUE
+  #force = TRUE,
+  strictMatch = FALSE
 )
 
 # Add GeneExpressionMatrix to ArrowFiles
@@ -262,15 +265,22 @@ if (length(cellsToKeep) == 0) {
 print("Subsetting ArchR project to keep only overlapping cells")
 projMulti2 <- subsetArchRProject(ArchRProj = projMulti1, cells = getCellNames(projMulti1)[cellsToKeep], outputDirectory = "Gaiti_multiome", force = TRUE)
 
+# remove projMulti1 from memory
+rm(projMulti1)
+
 # add gene expression matrix to the ArchR project
 print("Adding GeneExpressionMatrix to ArchR Project")
 projMulti2 <- addGeneExpressionMatrix(input = projMulti2, seRNA = seRNA, strictMatch = TRUE, force = TRUE)
 
+# Save the project
+print("Saving the project")
+saveArchRProject(ArchRProj = projMulti2, outputDirectory = "Gaiti_multiome", load = TRUE)
+
 # filter doublets; note addDoubletScores must be run previously
 ## Default filterRatio = 1; this is a consistent filter applied on all samples
 ## Can be adjusted to filter more cells
-print("Starting adddoubletscores and filterDoublets")
-projMulti2 <- addDoubletScores(projMulti2, force = TRUE)
+print("filterDoublets")
+# projMulti2 <- addDoubletScores(projMulti2, force = TRUE)
 projMulti2 <- filterDoublets(ArchRProj = projMulti2)
 
 # Save the project

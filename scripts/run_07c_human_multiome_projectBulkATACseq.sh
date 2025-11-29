@@ -98,37 +98,38 @@ for (reduction in available_reductions) {
   
   # Add error handling around the projection
   tryCatch({
-    # Print reduction dimensions for debugging
-    if (reduction %in% names(proj@reducedDims)) {
-      cat("Reduced dims dimensions:", dim(proj@reducedDims[[reduction]]), "\n")
-    }
+    # # Print reduction dimensions for debugging
+    # if (reduction %in% names(proj@reducedDims)) {
+    #   cat("Reduced dims dimensions:", dim(proj@reducedDims[[reduction]]), "\n")
+    # }
     
-    # Validate embedding exists and has proper structure
-    if (umap_name %in% names(proj@embeddings)) {
-      cat("Embedding dimensions:", dim(proj@embeddings[[umap_name]]), "\n")
-    } else {
-      cat("WARNING: Embedding", umap_name, "not accessible. Skipping...\n")
-      next
-    }
+    # # Validate embedding exists and has proper structure
+    # if (umap_name %in% names(proj@embeddings)) {
+    #   cat("Embedding dimensions:", dim(proj@embeddings[[umap_name]]), "\n")
+    # } else {
+    #   cat("WARNING: Embedding", umap_name, "not accessible. Skipping...\n")
+    #   next
+    # }
     
-    # Additional validation: check that reduction and embedding are compatible
-    cat("Checking compatibility between reduction and embedding...\n")
-    reduction_dim <- nrow(proj@reducedDims[[reduction]])
-    embedding_dim <- nrow(proj@embeddings[[umap_name]])
-    cat("Cells in reduction:", reduction_dim, "\n")
-    cat("Cells in embedding:", embedding_dim, "\n")
+    # # Additional validation: check that reduction and embedding are compatible
+    # cat("Checking compatibility between reduction and embedding...\n")
+    # reduction_dim <- nrow(proj@reducedDims[[reduction]])
+    # embedding_dim <- nrow(proj@embeddings[[umap_name]])
+    # cat("Cells in reduction:", reduction_dim, "\n")
+    # cat("Cells in embedding:", embedding_dim, "\n")
     
-    if (reduction_dim == 0 || embedding_dim == 0) {
-      cat("WARNING: Empty reduction or embedding detected. Skipping...\n")
-      next
-    }
+    # if (reduction_dim == 0 || embedding_dim == 0) {
+    #   cat("WARNING: Empty reduction or embedding detected. Skipping...\n")
+    #   next
+    # }
     
-    if (reduction_dim != embedding_dim) {
-      cat("WARNING: Mismatch between reduction and embedding dimensions. Skipping...\n")
-      next
-    }
+    # if (reduction_dim != embedding_dim) {
+    #   cat("WARNING: Mismatch between reduction and embedding dimensions. Skipping...\n")
+    #   next
+    # }
     
     # project bulk ATAC-seq to scATAC-seq
+    print("Projecting bulk ATAC-seq to scATAC-seq...")
     bulkPro <- projectBulkATAC(
       ArchRProj = proj,
       seATAC = seBulk,

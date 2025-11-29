@@ -120,6 +120,10 @@ for (col in cols_to_add) {
     )
 }
 
+# Verify samples added
+print("Verifying added samples:")
+print(table(projSubset@cellColData$Sample))
+
 # Save the project
 print("Saving the project")
 saveArchRProject(ArchRProj = projSubset, outputDirectory = output_dir, load = TRUE)

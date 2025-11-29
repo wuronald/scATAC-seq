@@ -961,11 +961,11 @@ counts1 <- Read10X_h5(
 )
 
 counts2 <- Read10X_h5(
-  here("data","Gaiti_multiome", "filtered_feature_bc_matrix.h5")
+  here("data","Gaiti_multiome","GSM8820702_6419_A" ,"filtered_feature_bc_matrix.h5")
 )
 
 counts3 <- Read10X_h5(
-  here("data","Gaiti_multiome", "GSM8820702_6419_A_gene_expression_filtered_feature_bc_matrix.h5")
+  here("data","Gaiti_multiome","GSM8820703_6419_B" ,"filtered_feature_bc_matrix.h5")
 )
 
 
@@ -987,4 +987,12 @@ class(counts3)
 counts3
 
 library(DropletUtils)
+
+# compare rownames 
+
+nrow(counts2) # 201635
+nrow(counts3) # 98740
+
+counts2
+counts3
 ```

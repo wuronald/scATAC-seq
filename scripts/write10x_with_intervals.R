@@ -202,6 +202,37 @@ get_gene_ranges <- function(genome = c("hg38", "hg19", "mm10", "mm39")) {
     library(EnsDb.Mmusculus.v79)
     gene_ranges <- genes(EnsDb.Mmusculus.v79::EnsDb.Mmusculus.v79)
   }
+
+  ################################################################
+  # *** NEW FIX: ENSURE UCSC STYLE (chr prefix) WITHOUT INTERNET ***
+  ################################################################
+  
+  # 1. Get the current sequence levels (e.g., "1", "2", "X", "MT", "GL000...")
+  current_levels <- seqlevels(gene_ranges)
+  
+  # 2. Define the canonical chromosomes that need the "chr" prefix
+  # Note: EnsDb annotations often already have "MT" for mitochondria.
+  canonical_chroms <- c(as.character(1:22), "X", "Y", "MT")
+  
+  # 3. Create a mapping vector for the canonical chromosomes
+  levels_to_fix <- current_levels[current_levels %in% canonical_chroms]
+  
+  if (length(levels_to_fix) > 0) {
+    # Create a named vector: new_name = old_name
+    seq_map <- paste0("chr", levels_to_fix)
+    names(seq_map) <- levels_to_fix
+    
+    # 4. Apply the mapping using GenomeInfoDb::renameSeqlevels()
+    # This function is local and does not require internet access, it only 
+    # uses the provided mapping vector to update the GRanges object's internal levels.
+    if (!requireNamespace("GenomeInfoDb", quietly = TRUE)) {
+      stop("Package 'GenomeInfoDb' is required for the local renameSeqlevels() function.")
+    }
+    
+    message("Renaming sequence levels to add 'chr' prefix locally...")
+    gene_ranges <- GenomeInfoDb::renameSeqlevels(gene_ranges, seq_map)
+  }
+  ################################################################
   
   message("Loaded ", length(gene_ranges), " gene ranges")
   return(gene_ranges)
