@@ -5,9 +5,9 @@
 #SBATCH --partition=himem
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=18
-#SBATCH --mem=60G
-#SBATCH --time=10:00:00
+#SBATCH --cpus-per-task=6
+#SBATCH --mem=58G
+#SBATCH --time=12:00:00
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
@@ -23,7 +23,7 @@ library(here)
 set.seed(1)
 
 # Set the number of threads for ArchR
-addArchRThreads(threads = 18)
+addArchRThreads(threads = 6)
 
 # input files setup:
 parent_dir <- here::here("data", "Gaiti_multiome")
