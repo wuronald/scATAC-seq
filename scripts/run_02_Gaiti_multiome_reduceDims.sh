@@ -65,6 +65,46 @@ projMulti2 <- addIterativeLSI(
   force = TRUE
 )
 
+# Check number of cells in each
+print("Dimensions of reducedDims")
+dim(projMulti2@reducedDims$LSI_ATAC$matSVD)
+dim(projMulti2@reducedDims$LSI_RNA$matSVD)
+
+# Check if cell names match
+print("Check if cell names match between reducedDims")
+identical(rownames(projMulti2@reducedDims$LSI_ATAC$matSVD), 
+          rownames(projMulti2@reducedDims$LSI_RNA$matSVD))
+
+# Check for any issues in the matrices
+print("Check for NA values in reducedDims matrices")
+sum(is.na(projMulti2@reducedDims$LSI_ATAC$matSVD))
+sum(is.na(projMulti2@reducedDims$LSI_RNA$matSVD))
+
+# Get cells present in both modalities
+print("Get common cells present in both modalities")
+commonCells <- intersect(
+  rownames(projMulti2@reducedDims$LSI_ATAC$matSVD),
+  rownames(projMulti2@reducedDims$LSI_RNA$matSVD)
+)
+
+print("number of getcellnames")
+length(getCellNames(projMulti2))
+
+print("Number of common cells:")
+length(commonCells)
+head(commonCells)
+
+# Subset the ArchRProject to only include common cells
+print("Subsetting ArchRProject to only include common cells")
+# projMulti2 <- subsetArchRProject(ArchRProj = projMulti2, cells = getCellNames(projMulti2)[commonCells], outputDirectory = "Gaiti_multiome", force = TRUE)
+
+projMulti2 <- subsetArchRProject(
+  ArchRProj = projMulti2, 
+  cells = commonCells,  # Just use commonCells directly, not as an index
+  outputDirectory = "Gaiti_multiome", 
+  force = TRUE
+)
+
 # reduce the number of dimensions with Both scATAC and scRNA data Combined
 print("Reduced dimensions with Both scATAC and scRNA data Combined")
 projMulti2 <- addCombinedDims(projMulti2, reducedDims = c("LSI_ATAC", "LSI_RNA"), name =  "LSI_Combined")

@@ -134,8 +134,8 @@ projMulti1 <- ArchRProject(
   copyArrows = TRUE #This is recommended so that you maintain an unaltered copy for later usage.
 )
 # add doublet scores
-print("Adding doublet scores to ArchR Project")
-projMulti1 <- addDoubletScores(projMulti1, force = TRUE)
+#print("Adding doublet scores to ArchR Project")
+#projMulti1 <- addDoubletScores(projMulti1, force = TRUE)
 
 # show available matrices for the project
 print("Available matrices in the ArchR Project:") 
@@ -226,12 +226,11 @@ print("importing scRNA data")
 seRNA <- import10xFeatureMatrix(
   input = rnaFiles,
   names = names(rnaFiles),
-  #force = TRUE,
-  strictMatch = FALSE
+  strictMatch = TRUE
 )
 
 # Add GeneExpressionMatrix to ArrowFiles
-print("Adding GeneExpressionMatrix to ArrowFile")
+# print("Adding GeneExpressionMatrix to ArrowFile")
 
 # addGeneExpressionMatrix(
 #   input = projMulti1,
@@ -249,21 +248,35 @@ print("Adding GeneExpressionMatrix to ArrowFile")
 # seRNA <- getMatrixFromProject(ArchRProj = projMulti1, 
 #                               useMatrix = "GeneExpressionMatrix")
 
+print("Number of cells in ArchRProject")
+length(getCellNames(projMulti1))
+
 print("Number of cell names in Arrow files not in RNA data:")
 length(which(getCellNames(projMulti1) %ni% colnames(seRNA)))
 
 # keep only the cells that are in the RNA data
 print("Keeping cells that are in RNA data")
 cellsToKeep <- which(getCellNames(projMulti1) %in% colnames(seRNA))
+print(paste("Number of overlapping cells:", length(cellsToKeep)))
+print("First few overlapping cell names:")
+head(cellsToKeep)
 
 # Check if any cells to keep
 if (length(cellsToKeep) == 0) {
   stop("No overlapping cells found between RNA data and Arrow files!")
 }
 
+# Tabulate cell counts before subsetting
+print("Cell counts before subsetting:")
+table(projMulti1$Sample)
+
 # Subset the ArchR project to keep only these cells
 print("Subsetting ArchR project to keep only overlapping cells")
 projMulti2 <- subsetArchRProject(ArchRProj = projMulti1, cells = getCellNames(projMulti1)[cellsToKeep], outputDirectory = "Gaiti_multiome", force = TRUE)
+
+# Tabulate cell counts after subsetting
+print("Cell counts after subsetting:")
+table(projMulti2$Sample)
 
 # remove projMulti1 from memory
 rm(projMulti1)
@@ -272,16 +285,25 @@ rm(projMulti1)
 print("Adding GeneExpressionMatrix to ArchR Project")
 projMulti2 <- addGeneExpressionMatrix(input = projMulti2, seRNA = seRNA, strictMatch = TRUE, force = TRUE)
 
+# Tabulate cell counts after adding GeneExpressionMatrix
+print("Cell counts after adding gene expression matrix:")
+table(projMulti2$Sample)
+
 # Save the project
-print("Saving the project")
-saveArchRProject(ArchRProj = projMulti2, outputDirectory = "Gaiti_multiome", load = TRUE)
+#print("Saving the project")
+#saveArchRProject(ArchRProj = projMulti2, outputDirectory = "Gaiti_multiome", load = TRUE)
 
 # filter doublets; note addDoubletScores must be run previously
 ## Default filterRatio = 1; this is a consistent filter applied on all samples
 ## Can be adjusted to filter more cells
+print("Adding doublet scores to ArchR Project")
+projMulti2 <- addDoubletScores(projMulti2, force = TRUE)
 print("filterDoublets")
-# projMulti2 <- addDoubletScores(projMulti2, force = TRUE)
 projMulti2 <- filterDoublets(ArchRProj = projMulti2)
+
+# Tabulate cell counts after doublet filtering
+print("Cell counts after doublet filtering:")
+table(projMulti2$Sample)
 
 # Save the project
 print("Saving the project")
