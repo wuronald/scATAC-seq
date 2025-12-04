@@ -7,7 +7,13 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=58G
-#SBATCH --time=12:00:00
+#SBATCH --time=08:00:00
+
+# Remember to rename and move swapped 6467_A_filtered_feature_bc_matrix.h5
+# and 6467_B_filtered_feature_bc_matrix.h5 to their correct sample folders before running this script!
+# mv /cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820713_6467_A/6467_A_filtered_feature_bc_matrix.h5 /cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820714_6467_B/temp.h5 && \
+# mv /cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820714_6467_B/6467_B_filtered_feature_bc_matrix.h5 /cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820713_6467_A/6467_A_filtered_feature_bc_matrix.h5 && \
+# mv /cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820714_6467_B/temp.h5 /cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820714_6467_B/6467_B_filtered_feature_bc_matrix.h5
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
@@ -125,6 +131,14 @@ print("Created ArrowFiles:")
 print(ArrowFiles)
 # Uncomment the following line if you want to use specific Arrow files
 # ArrowFiles <- c("SM122_BR4.arrow","SM222_AR1.arrow","SM222_GL1.arrow")
+
+# Create diagnostic ArchRProject to check ArrowFiles
+print("Creating diagnostic ArchR Project to check ArrowFiles")
+projCheck <- ArchRProject(
+  ArrowFiles = c("GSM8820713_6467_A.arrow","GSM8820714_6467_B.arrow"), 
+  outputDirectory = "Gaiti_multiome_check",
+  copyArrows = FALSE #This is recommended so that you maintain an unaltered copy for later usage.
+)
 
 # Create ArchR project
 print("Creating ArchR Project")
@@ -250,9 +264,13 @@ seRNA <- import10xFeatureMatrix(
 
 print("Number of cells in ArchRProject")
 length(getCellNames(projMulti1))
+print("Number of cells in ArchRProject diagnostic check")
+length(getCellNames(projCheck))
 
 print("Number of cell names in Arrow files not in RNA data:")
 length(which(getCellNames(projMulti1) %ni% colnames(seRNA)))
+print("Number of cell names in Arrow files not in RNA data:")
+length(which(getCellNames(projCheck) %ni% colnames(seRNA)))
 
 # keep only the cells that are in the RNA data
 print("Keeping cells that are in RNA data")
@@ -296,8 +314,47 @@ table(projMulti2$Sample)
 # filter doublets; note addDoubletScores must be run previously
 ## Default filterRatio = 1; this is a consistent filter applied on all samples
 ## Can be adjusted to filter more cells
+
 print("Adding doublet scores to ArchR Project")
 projMulti2 <- addDoubletScores(projMulti2, force = TRUE)
+
+# Function to preview and save doublets before filtering
+saveDoubletBarcodes <- function(ArchRProj, cutEnrich = 1, cutScore = -Inf, 
+                                 filterRatio = 1, outfile = "doublets.txt"){
+  
+  df <- getCellColData(ArchRProj, c("Sample", "DoubletEnrichment", "DoubletScore"))
+  splitDF <- split(seq_len(nrow(df)), as.character(df$Sample))
+  
+  doublets <- lapply(splitDF, function(y){
+    x <- df[y, , drop = FALSE]
+    n <- nrow(x)
+    x <- x[order(x$DoubletEnrichment, decreasing = TRUE), ]
+    
+    if(!is.null(cutEnrich)){
+      x <- x[which(x$DoubletEnrichment >= cutEnrich), ]
+    }
+    if(!is.null(cutScore)){
+      x <- x[which(x$DoubletScore >= cutScore), ]
+    }
+    
+    if(nrow(x) > 0){
+      head(rownames(x), filterRatio * n * (n / 100000))
+    } else {
+      NULL
+    }
+  }) %>% unlist(use.names = FALSE)
+  
+  write.table(doublets, file = outfile, quote = FALSE, 
+              row.names = FALSE, col.names = FALSE)
+  
+  message("Saved ", length(doublets), " doublet barcodes to ", outfile)
+  return(doublets)
+}
+
+# Use it:
+print("Saving doublet barcodes before filtering")
+doublet_list <- saveDoubletBarcodes(projMulti2, outfile = "Gaiti_multiome_doublets.txt")
+
 print("filterDoublets")
 projMulti2 <- filterDoublets(ArchRProj = projMulti2)
 
