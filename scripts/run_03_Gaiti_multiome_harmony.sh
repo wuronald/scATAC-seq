@@ -1,18 +1,18 @@
 #!/bin/bash
-#SBATCH --job-name=run_03_human_multiome_harmony
-#SBATCH --output=run_03_human_multiome_harmony_%j.out
-#SBATCH --error=run_03_human_multiome_harmony_%j.err
+#SBATCH --job-name=run_03_Gaiti_multiome_harmony
+#SBATCH --output=run_03_Gaiti_multiome_harmony_%j.out
+#SBATCH --error=run_03_Gaiti_multiome_harmony_%j.err
 #SBATCH --partition=himem
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
 #SBATCH --mem=60G
-#SBATCH --time=01:00:00
+#SBATCH --time=04:00:00
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
 
-# Run R script
+# Run R scriptmv
 Rscript - <<'EOF'
 
 # load libraries
@@ -27,7 +27,7 @@ addArchRThreads(threads = 18)
 
 # Load the project
 print("Loading ArchR project")
-proj <- loadArchRProject(path = "human_multiome")
+proj <- loadArchRProject(path = "Gaiti_multiome")
 
 # Check available reducedDims and embeddings:
 print("Available Original LSI reducedDims:")
@@ -36,13 +36,15 @@ original_embeddings <- names(proj@embeddings)
 print(paste0("Available original reducedDims:", original_reducedDims))
 print(paste0("Available original embeddings:", original_embeddings))
 
-# add libraries as batch to cellColData:
+# add patient IDs as batch to cellColData:
+# patient IDs: 6419, 6425, 6434, 6467, 6509, 6514 
 cell_samples <- getCellColData(proj, select = "Sample", drop = TRUE)
-batch_vector <- ifelse(cell_samples == "Zadeh__C0736__5117", "batch1",
-                 ifelse(cell_samples == "Zadeh_Shelia__56", "batch2",
-                 ifelse(cell_samples %in% c("Zadeh_Shelia__60"), "batch3",
-                 ifelse(cell_samples %in% c("Zadeh_Sheila__PIMO66", "Zadeh_Sheila__PIMO67", "Zadeh_Sheila__PIMO70_b"), "batch4",
-                 ifelse(cell_samples == "Zadeh_Sheila__PIMO70", "batch5", NA)))))
+batch_vector <- ifelse(grepl("6419", cell_samples), "batch1",
+                ifelse(grepl("6425", cell_samples), "batch2",
+                ifelse(grepl("6434", cell_samples), "batch3",
+                ifelse(grepl("6467", cell_samples), "batch4",
+                ifelse(grepl("6509", cell_samples), "batch5",   
+                ifelse(grepl("6514", cell_samples), "batch6", NA))))))
 
 proj <- addCellColData(
   ArchRProj = proj,
@@ -158,7 +160,7 @@ for (i in seq_along(new_embeddings)) {
 
 # Save the project
 print("Saving Project")
-saveArchRProject(ArchRProj = proj, outputDirectory = "human_multiome_harmony", load = TRUE)
+saveArchRProject(ArchRProj = proj, outputDirectory = "Gaiti_multiome_harmony", load = TRUE)
 EOF
 
 echo "ArchR analysis completed"

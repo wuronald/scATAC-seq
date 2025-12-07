@@ -12,6 +12,11 @@
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
 
+# Note: Run R markdown notebook to generate/pre-process seurat object metadata before running this script.
+# eg. human_multiome_merged_seurat_archr.Rmd for human_multiome
+# eg. mouse_multiome_merged_seurat_archr.Rmd for mouse_multiome
+# eg. Gaiti_multiome_merged_seurat_archr.Rmd for Gaiti_multiome
+
 # Usage: sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh human_multiome_harmony
 # Usage: sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh mouse_multiome_harmony_test
 ARCHR_DIR="$1"
@@ -61,6 +66,15 @@ if (!file.exists(metadata_path)) {
 }
 seurat_metadata <- readr::read_csv(metadata_path)
 print(paste("Seurat metadata loaded from", metadata_path))
+
+# check if columns exist in seurat_metadata
+required_columns <- c("seurat_atac_barcode", "seurat_gex_barcode")
+missing_columns <- setdiff(required_columns, colnames(seurat_metadata))
+if (length(missing_columns) > 0) {
+    stop(paste("Missing required columns in Seurat metadata:", paste(missing_columns, collapse = ", ")))
+} else {
+    print("All required columns are present in Seurat metadata.")
+}
 
 # get barcodes from Seurat object
 print("Getting barcodes from Seurat metadata")
