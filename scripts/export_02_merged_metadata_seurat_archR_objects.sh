@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
-#SBATCH --mem=20G
+#SBATCH --mem=60G
 #SBATCH --time=00:30:00
 
 # Load necessary modules (adjust as needed for your system)
@@ -48,7 +48,9 @@ if (grepl("human", archr_dir, ignore.case=TRUE)) {
     library(BSgenome.Mmusculus.UCSC.mm10)
     genome <- "mm10"
 } else {
-    stop("Could not determine species from ARCHR_DIR name.")
+    print("Could not determine species from ARCHR_DIR name. Default to human")
+    library(BSgenome.Hsapiens.UCSC.hg38)
+    genome <- "hg38"
 }
 
 
@@ -118,6 +120,7 @@ print(paste("Are the cell names in the same order?", are_identical))
 
 # Dynamically add columns from seurat_metadata_subset to ArchR metadata
 cols_to_add <- c("hybrid_pair","neftel_4_state",
+"Region.annotation", "mislabelled",
 "Azimuth_class", "Azimuth_subclass",
 "Ambiguous", "PIMO_status", "PIMO_up_status") # add more column names as needed
 
