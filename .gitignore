@@ -42,6 +42,7 @@ ArchRLogs/
 .log
 # html
 *.html
+*.nb.html
 # PDF
 *.pdf
 # png

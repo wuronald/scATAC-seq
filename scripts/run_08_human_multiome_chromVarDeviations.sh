@@ -49,7 +49,7 @@ groupBy <- Sys.getenv("GROUP_BY", unset = "hybrid_pair")
 motifsOfInterest <- Sys.getenv("MOTIFS_OF_INTEREST", unset = "SOX,HIF,ARNT,NF1,NFI")
 
 # Convert comma-separated string to vector
-moi <- unlist(strsplit(motifsOfInterest, ","))
+moi <- trimws(unlist(strsplit(motifsOfInterest, ",")))
 
 cat("Using motifSet:", motifSet, "\n")
 cat("Using groupBy:", groupBy, "\n")
