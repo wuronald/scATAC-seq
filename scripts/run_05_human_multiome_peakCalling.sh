@@ -137,6 +137,11 @@ print(paste("Get marker peaks for", groupBy, "groups"))
 print(paste("Saved markersPeaks as .rds for", groupBy))
 saveRDS(markersPeaks, file = paste0("human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_", groupBy, ".rds"))
 
+# Save the markersPeaks GR object for easier load in the future
+print(paste("Saved markersPeaks GR as .rds for", groupBy))
+markersPeaks_GR <- getMarkers(markersPeaks, cutOff = "FDR <=  1 & abs(Log2FC) >= 0", returnGR = TRUE)
+saveRDS(markersPeaks_GR, file = paste0("human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_GR_", groupBy, ".rds"))
+
 }
 # pairwise test between PIMO_up_status groups: PIMOup vs PIMOdown
 print("Pairwise test between PIMO_up_status groups: PIMOup vs PIMOdown")

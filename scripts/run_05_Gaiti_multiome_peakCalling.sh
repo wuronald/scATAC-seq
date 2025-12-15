@@ -72,8 +72,8 @@ if (exists("findMacs2")) {
 }
 
 # Set of ArchR object metadata columns to iterate over for peak calling
-# groupBy_list <- c("PIMO_up_status", "hybrid_pair")
-groupBy_list <- c("hybrid_pair", "PIMO_up_status","PIMO_Region")
+# groupBy_list <- c("hybrid_pair", "PIMO_up_status","PIMO_Region") # hybrid_pair has NAs causing issues atm
+groupBy_list <- c("PIMO_up_status","PIMO_Region")
 
 print(paste("GroupBy list:", paste(groupBy_list, collapse = ", ")))
 
@@ -150,8 +150,15 @@ print(paste("Get marker peaks for", groupBy, "groups"))
 print(paste("Saved markersPeaks as .rds for", groupBy))
 saveRDS(markersPeaks, file = paste0("Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_", groupBy, ".rds"))
 
+# Save the markersPeaks GR object for easier load in the future
+print(paste("Saved markersPeaks GR as .rds for", groupBy))
+markersPeaks_GR <- getMarkers(markersPeaks, cutOff = "FDR <=  1 & abs(Log2FC) >= 0", returnGR = TRUE)
+saveRDS(markersPeaks_GR, file = paste0("Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_GR_", groupBy, ".rds"))
+
 }
-# pairwise test between PIMO_Region groups: PIMOup vs PIMOdown
+
+# pairwise test between PIMO_Region groups: 
+# 1. Within PIMOup EB vs TC
 print("Pairwise test between PIMO_Region groups: PIMOup_EB vs PIMOup_TC")
 markerTest <- getMarkerFeatures(
   ArchRProj = proj_hyp2, 
@@ -166,14 +173,94 @@ markerTest <- getMarkerFeatures(
 print(paste("Saved markerTest as .rds for PIMO_Region PIMOup_EB vs PIMOup_TC" ))
 saveRDS(markerTest, file = paste0("Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_PIMO_Region_", "PIMOup_EB_vs_PIMOup_TC", ".rds"))
 
-# extract markerTest GR object for PIMO_Region groups
+# Extract markerTest GR object for PIMO_Region groups
 print("Extracting markerTestGR object for PIMO_Region")
 markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
+
+# Save the markerTest GR object for easier load in the future
+print(paste("Saved markerTest GR as .rds for PIMO_Region PIMOup_EB vs PIMOup_TC" ))
+saveRDS(markerTest_GR, file = "Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_GR_PIMO_Region_PIMOup_EB_vs_PIMOup_TC.rds")
 
 print("Number of markerTest peaks identified per group:")
 print(sapply(markerTest_GR, length))
 
-saveRDS(markerTest_GR, file = "Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_GR_PIMO_Region_PIMOup_EB_vs_PIMOup_TC.rds")
+# 2. PIMOup vs PIMOdown for EB regions only
+print("Pairwise test between PIMO_Region groups: PIMOup_EB vs PIMOdown_EB")
+markerTest <- getMarkerFeatures(
+  ArchRProj = proj_hyp2, 
+  useMatrix = "PeakMatrix",
+  groupBy = "PIMO_Region",
+  testMethod = "wilcoxon",
+  bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
+  useGroups = "PIMOup_EB",
+  bgdGroups = "PIMOdown_EB"
+)
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for PIMO_Region :", "PIMOup_EB vs PIMOdown_EB" ))
+saveRDS(markerTest, file = paste0("Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_PIMO_Region_", "PIMOup_EB_vs_PIMOdown_EB", ".rds"))
+
+# Extract markerTest GR object for PIMO_Region groups
+print("Extracting markerTestGR object for PIMO_Region")
+markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
+
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for PIMO_Region PIMOup_EB vs PIMOdown_EB" ))
+saveRDS(markerTest_GR, file = "Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_GR_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB.rds")
+
+print("Number of markerTest peaks identified per group:")
+print(sapply(markerTest_GR, length))
+
+# 3. PIMOup vs PIMOdown for TC regions only
+print("Pairwise test between PIMO_Region groups: PIMOup_TC vs PIMOdown_TC")
+markerTest <- getMarkerFeatures(
+  ArchRProj = proj_hyp2, 
+  useMatrix = "PeakMatrix",
+  groupBy = "PIMO_Region",
+  testMethod = "wilcoxon",
+  bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
+  useGroups = "PIMOup_TC",
+  bgdGroups = "PIMOdown_TC"
+)
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for PIMO_Region :", "PIMOup_TC vs PIMOdown_TC" ))
+saveRDS(markerTest, file = paste0("Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_PIMO_Region_", "PIMOup_TC_vs_PIMOdown_TC", ".rds"))
+
+# extract markerTest GR object for PIMO_Region groups
+print("Extracting markerTestGR object for PIMO_Region")
+markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
+
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for PIMO_Region PIMOup_TC vs PIMOdown_TC" ))
+saveRDS(markerTest_GR, file = "Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_GR_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC.rds")
+
+print("Number of markerTest peaks identified per group:")
+print(sapply(markerTest_GR, length))
+
+# 4. PIMOup vs PIMOdown for PT regions only
+print("Pairwise test between PIMO_Region groups: PIMOup_PT vs PIMOdown_PT")
+markerTest <- getMarkerFeatures(
+  ArchRProj = proj_hyp2, 
+  useMatrix = "PeakMatrix",
+  groupBy = "PIMO_Region",
+  testMethod = "wilcoxon",
+  bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
+  useGroups = "PIMOup_PT",
+  bgdGroups = "PIMOdown_PT"
+)
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for PIMO_Region :", "PIMOup_PT vs PIMOdown_PT" ))
+saveRDS(markerTest, file = paste0("Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_PIMO_Region_", "PIMOup_PT_vs_PIMOdown_PT", ".rds"))
+
+# extract markerTest GR object for PIMO_Region groups
+print("Extracting markerTestGR object for PIMO_Region")
+markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
+
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for PIMO_Region PIMOup_PT vs PIMOdown_PT" ))
+saveRDS(markerTest_GR, file = "Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_GR_PIMO_Region_PIMOup_PT_vs_PIMOdown_PT.rds")
+
+print("Number of markerTest peaks identified per group:")
+print(sapply(markerTest_GR, length))
 
 # Save the project
 proj_hyp2 <- saveArchRProject(ArchRProj = proj_hyp2, outputDirectory = "Gaiti_multiome_harmony_merged_malig_peak", load = TRUE)

@@ -78,23 +78,25 @@ if (file.exists(peakSetPath)) {
 
 # Load markerTest from pairwise differential peaks getMarkerFeatures(): 
 # Construct path dynamically based on groupBy
-markersTest_rds <- paste0("human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_", groupBy, ".rds")
+markersTest_rds <- paste0("human_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_", groupBy, "PIMOup_vs_PIMOdown",".rds")
 
 if (!exists("markerTest")) {
-    print("loading markerTest")
+    print("loading markerTest for pairwise comparison for PIMO_up_status PIMOup vs PIMOdown")
     if (file.exists(markersTest_rds)) {
         print("previously saved markersPeaks loaded:")
         print(markersTest_rds)
         markerTest <- readRDS(file = markersTest_rds)
     } else {
-        print("extracting markersPeaks")
+        print("extracting pairwise markerTest for PIMO_up_status PIMOup vs PIMOdown")
         markerTest <- getMarkerFeatures(
-            ArchRProj = proj,
-            useMatrix = "PeakMatrix",
-            groupBy = groupBy,
-            bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
-            testMethod = "wilcoxon"
-        )
+                        ArchRProj = proj, 
+                        useMatrix = "PeakMatrix",
+                        groupBy = "PIMO_up_status",
+                        testMethod = "wilcoxon",
+                        bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
+                        useGroups = "PIMOup",
+                        bgdGroups = "PIMOdown"
+                        )
     }
 }
 
@@ -223,90 +225,5 @@ print("Plotting heatmap of motif enrichment results in non-pairwise marker peaks
 heatmapEM_up <- plotEnrichHeatmap(motifsUp, n = 10, transpose = TRUE)
 heatmapEM_down <- plotEnrichHeatmap(motifsDown, n = 10, transpose = TRUE)
 plotPDF(heatmapEM_up,heatmapEM_down, name = paste0(groupBy, "-_MotifsUp_MotifsDown-Enriched-Marker-Heatmap_", motifSet), width = 8, height = 6, ArchRProj = proj, addDOC = TRUE)
-
-# ########################################################
-# # Compute chromeVar Deviations
-# print("Computing chromVar deviations")
-# proj <- addBgdPeaks(proj, force = TRUE)
-# proj <- addDeviationsMatrix(ArchRProj = proj, peakAnnotation = annoName,
-#         matrixName = paste0("MotifMatrix_", motifSet), # name of the deviations matrix
-#         force = TRUE
-#         )
-
-# # Plot Variability of Motif Deviations
-# print("Plotting variability of motif deviations")
-# plotVarDev <- getVarDeviations(proj, name = paste0("MotifMatrix_", motifSet), plot = FALSE)
-
-# print("Saving variability of motif deviations plot and data")
-# saveRDS(plotVarDev, file = file.path(outDir, paste0("chromVarDeviations_", filePrefix, "_", motifSet, ".rds")))
-
-# plotVarDev <- getVarDeviations(proj, name = paste0("MotifMatrix_", motifSet),
-#         n = 25, # label the top 25 most variable motifs
-#         plot = TRUE
-#         ) # set plot = TRUE to get the ggplot object
-# plotPDF(plotVarDev, name = paste0(filePrefix, "-Variable-Motif-Deviation-Scores_", motifSet), width = 5, height = 5, ArchRProj = proj, addDOC = TRUE)
-# ########################################################
-# moi <- c("SOX","HIF","ARNT","NF1","NFI")
-
-# # add impute weights
-# proj <- addImputeWeights(proj,
-# reducedDims = "Harmony_LSI_Combined"
-# )
-
-# print(paste("Finding motif deviations for motifs of interest:", paste(moi, collapse=", ")))
-# markerMotifs <- getFeatures(proj, select = paste(moi, collapse="|"), useMatrix = paste0("MotifMatrix_", motifSet))
-# markerMotifs <- grep("z:", markerMotifs, value = TRUE)
-# print(paste("Marker motifs found:", paste(markerMotifs, collapse = ", ")))
-
-# # Plot motif deviations for motifs of interest
-# print("Plotting motif deviations for motifs of interest")
-# p <- plotGroups(ArchRProj = proj, 
-#   groupBy = groupBy, 
-#   colorBy = paste0("MotifMatrix_", motifSet), 
-#   name = markerMotifs,
-#   imputeWeights = getImputeWeights(proj) # might be missing
-# )
-# # customize the plots
-# p2 <- lapply(seq_along(p), function(x){
-#   if(x != 1){
-#     p[[x]] + guides(color = "none", fill = "none") + 
-#     theme_ArchR(baseSize = 6) +
-#     theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm")) +
-#     theme(
-#         axis.text.y=element_blank(), 
-#         axis.ticks.y=element_blank(),
-#         axis.title.y=element_blank()
-#     ) + ylab("")
-#   }else{
-#     p[[x]] + guides(color = "none", fill = "none") + 
-#     theme_ArchR(baseSize = 6) +
-#     theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm")) +
-#     theme(
-#         axis.ticks.y=element_blank(),
-#         axis.title.y=element_blank()
-#     ) + ylab("")
-#   }
-# })
-# # do.call(cowplot::plot_grid, c(list(nrow = 1, rel_widths = c(2, rep(1, length(p2) - 1))),p2))
-
-# plotPDF(p, name = paste0(filePrefix, "-Groups-Deviations-w-Imputation_", motifSet), width = 5, height = 5, ArchRProj = proj, addDOC = TRUE)
-
-# p <- plotEmbedding(
-#     ArchRProj = proj, 
-#     colorBy = paste0("MotifMatrix_", motifSet), 
-#     name = sort(markerMotifs), 
-#     embedding = "UMAP_Harmony_LSI_Combined"
-# )
-# p2 <- lapply(p, function(x){
-#     x + guides(color = "none", fill = "none") + 
-#     theme_ArchR(baseSize = 6.5) +
-#     theme(plot.margin = unit(c(0, 0, 0, 0), "cm")) +
-#     theme(
-#         axis.text.x=element_blank(), 
-#         axis.ticks.x=element_blank(), 
-#         axis.text.y=element_blank(), 
-#         axis.ticks.y=element_blank()
-#     )
-# })
 
 EOF
