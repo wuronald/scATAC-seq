@@ -82,6 +82,34 @@ class(chromVarDev) # DFrame
 ms_motifsUp_homer <- readRDS(file = here("data", "mouse_multiome", "motifEnrichment_homer_PIMO_up_status", "motifsUp_PIMOupstatus_homer.rds"))
 ```
 
+## load updated results (PIMO70_b added)
+```{r load updated motif results}
+# updated motif results from PIMO_up_status PIMOup_vs_PIMOdown (pairwise)
+
+# motifSet = homer
+motifsUp_homer <- readRDS(file = here("data", "human_multiome", "motifEnrichment_homer_PIMO_up_status", "motifsUp_PIMOupstatus_homer.rds"))
+motifsDown_homer <- readRDS(file = here("data", "human_multiome", "motifEnrichment_homer_PIMO_up_status", "motifsDown_PIMOupstatus_homer.rds"))
+
+# chromVar deviations
+chromVarDev_homer_old <- readRDS(
+  file = here(
+    "data",
+    "human_multiome",
+    "motifEnrichment_homer",
+    "chromVarDeviations_PIMOup_vs_PIMOdown_homer.rds"
+  )
+)
+
+chromVarDev_homer <- readRDS(
+  file = here(
+    "data",
+    "human_multiome",
+    "chromVarDeviations_homer_PIMO_up_status",
+    "2025-12-01",
+    "chromVarDeviations_PIMOupstatus_homer.rds"
+  )
+)
+```
 ## load custom enrichment with bulk ATAC in multiome
 Here we load the result of the custom enrichment analysis where peaks from bulk ATAC-seq were used to compare to multiome results. This was processed by `run_07b_human_multiome_CustomMotifEnrichment.sh`
 
@@ -334,6 +362,7 @@ motifDRametoDF <- function(DF){
   return(DF)
 }
 # Convert Chromvar DFrame to dataframe
+chromVarDev_homer_old.df <-motifDRametoDF(chromVarDev_homer_old)
 chromVarDev_homer.df <- motifDRametoDF(chromVarDev_homer)
 chromVarDev.df <- motifDRametoDF(chromVarDev) # cisbp
 
@@ -346,13 +375,20 @@ return(df_sub) # returns subset of df
 
 # motifs of interest to check
 # motifs <- c("SOX", "HIF", "ARNT", "NF1", "NFI", "FOS", "JUN","AP-1")
-motifs <- c("ID1","ID2","ID3","ID4")
+# motifs <- c("ID1","ID2","ID3","ID4")
+motifs <- c("HIF",
+            "AP","JUN","FOS","FRA",
+            "NRF",
+            "OLIG")
+
 # check motifs of interest
 checkMotifsInterest(motifsUp.df, motifs)
 checkMotifsInterest(motifsDown.df, motifs)
 checkMotifsInterest(motifsUp_homer.df, motifs)
 checkMotifsInterest(motifsDown_homer.df, motifs)
 
+# check motifs of interest: chromVar
+checkMotifsInterest(chromVarDev_homer_old.df, motifs)
 checkMotifsInterest(chromVarDev_homer.df, motifs)
 
 # join tables
@@ -663,9 +699,14 @@ print(i)
 
 First, let's export the homer motifs from the multiome. We will reload this and load the bulk ATAC-seq homer motif results.
 ```{r export multiome homer motifs, eval = FALSE}
-write_csv(motifsUp_homer.df, here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsUP.csv"),
+# write_csv(motifsUp_homer.df, here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsUP.csv"),
+#                       col_names=TRUE)
+# write_csv(motifsDown_homer.df, here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsDown.csv"),
+#                       col_names=TRUE)
+
+write_csv(motifsUp_homer.df, here("data","bulkATAC","2025_12-08_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsUP.csv"),
                       col_names=TRUE)
-write_csv(motifsDown_homer.df, here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsDown.csv"),
+write_csv(motifsDown_homer.df, here("data","bulkATAC","2025_12-08_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsDown.csv"),
                       col_names=TRUE)
 ```
 
@@ -786,11 +827,27 @@ plotMotifEnrichments_new <- function(df, common_tfs_vector, show_labels = TRUE, 
   # 3. Conditionally add labels
   # This 'if' statement checks if show_labels is TRUE
   
-  if (show_labels) {
+  if (show_labels & length(common_tfs_vector) > 0) {
     ylimit <- round(max(df$mlog10Padj))
     
     gg <- gg + geom_label_repel(
       data = filter(df, is_common) %>% slice_head(n = show_labels_qty),
+      aes(label = TF_cleaned),
+      size = 3,
+      force = 10,
+      max.overlaps = Inf,
+      color = "black",
+      segment.color = "grey50",
+      xlim = c(100, Inf),
+      ylim = c(50, ylimit),
+      nudge_x = 5,
+      nudge_y = 10
+    )
+  }else{
+    ylimit <- round(max(df$mlog10Padj))
+    
+    gg <- gg + geom_label_repel(
+      data = filter(df) %>% slice_head(n = show_labels_qty),
       aes(label = TF_cleaned),
       size = 3,
       force = 10,
@@ -815,23 +872,50 @@ gg_compare3 <-plotMotifEnrichments_new(df1_cleaned, common_tfs_1,FALSE)
 gg_compare4 <-plotMotifEnrichments_new(df1_cleaned, common_tfs_2)
 gg_compare5 <-plotMotifEnrichments_new(df1_cleaned, common_tfs_2,FALSE)
 
+gg_compare6 <-plotMotifEnrichments(df4_cleaned) # [1] 332   6
+gg_compare7 <-plotMotifEnrichments_new(df4_cleaned, common_tfs_3)
+gg_compare8 <-plotMotifEnrichments_new(df4_cleaned, common_tfs_3,FALSE)
+gg_compare9 <-plotMotifEnrichments_new(df4_cleaned, common_tfs_4)
+gg_compare10 <-plotMotifEnrichments_new(df4_cleaned, common_tfs_4,FALSE)
+
 # MotifsUP plots
 gg_compare1 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown")
 gg_compare2 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "H_BMP highlighted from G523 H_BMP_vs_N_BMP")
 gg_compare3 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "H_BMP highlighted from G523 H_BMP_vs_N_BMP")
 gg_compare4 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "N_BMP highlighted from G523 H_BMP_vs_N_BMP")
 gg_compare5 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "N_BMP highlighted from G523 H_BMP_vs_N_BMP")
+
+# MotifsDown Plots
+gg_compare6 + ggtitle("Human Multiome: MotifsDown in PIMOup vs PIMOdown")
+gg_compare7 + ggtitle("Human Multiome: MotifsDown in PIMOup vs PIMOdown", subtitle = "H_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare8 + ggtitle("Human Multiome: MotifsDown in PIMOup vs PIMOdown", subtitle = "H_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare9 + ggtitle("Human Multiome: MotifsDown in PIMOup vs PIMOdown", subtitle = "N_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare10 + ggtitle("Human Multiome: MotifsDown in PIMOup vs PIMOdown", subtitle = "N_BMP highlighted from G523 H_BMP_vs_N_BMP")
+
+
+plotMotifEnrichments_new(df1_cleaned, NULL)
 ```
 ## Export PDFs
 ```{r export multiome vs bulk-ATAC motif comparisons, eval = FALSE}
-pdf(here("Plots","2025-10-17_human_multiome_PIMOup_vs_PIMOdown_motifUP_vs_G523_H_BMP_vs_N_BMP_motif_ranking_bulk.pdf"))
-gg_compare1
-gg_compare2
-gg_compare3
+# pdf(here("Plots","2025-10-17_human_multiome_PIMOup_vs_PIMOdown_motifUP_vs_G523_H_BMP_vs_N_BMP_motif_ranking_bulk.pdf"))
+
+pdf(here("Plots","2025-12-08_human_multiome_PIMOup_vs_PIMOdown_motifUp_vs_G523_H_BMP_vs_N_BMP_motif_ranking_bulk.pdf"))
+plotMotifEnrichments_new(df1_cleaned, NULL) + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "Top 25 Motifs")
+gg_compare1 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown")
+gg_compare2 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "H_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare3 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "H_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare4 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "N_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare5 + ggtitle("Human Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "N_BMP highlighted from G523 H_BMP_vs_N_BMP")
 dev.off()
 
-pdf(here("Plots","2025-10-17_human_multiome_PIMOup_vs_PIMOdown_motifDown_vs_G523_H_BMP_vs_N_BMP_motif_ranking_bulk.pdf"))
-
+# pdf(here("Plots","2025-10-17_human_multiome_PIMOup_vs_PIMOdown_motifDown_vs_G523_H_BMP_vs_N_BMP_motif_ranking_bulk.pdf"))
+pdf(here("Plots","2025-12-08_human_multiome_PIMOup_vs_PIMOdown_motifDown_vs_G523_H_BMP_vs_N_BMP_motif_ranking_bulk.pdf"))
+plotMotifEnrichments_new(df4_cleaned, NULL) + ggtitle("Human Multiome: MotifsDown in PIMOup vs PIMOdown", subtitle = "Top 25 Motifs")
+gg_compare6 + ggtitle("Human Multiome: MotifsDown in PIMOup vs PIMOdown")
+gg_compare7 + ggtitle("Human Multiome: MotifsDown in PIMOup vs PIMOdown", subtitle = "H_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare8 + ggtitle("Human Multiome: MotifsDown in PIMOup vs PIMOdown", subtitle = "H_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare9 + ggtitle("Human Multiome: MotifsDown in PIMOup vs PIMOdown", subtitle = "N_BMP highlighted from G523 H_BMP_vs_N_BMP")
+gg_compare10 + ggtitle("Human Multiome: MotifsDown in PIMOup vs PIMOdown", subtitle = "N_BMP highlighted from G523 H_BMP_vs_N_BMP")
 dev.off()
 
 ```
@@ -926,7 +1010,8 @@ motifCompareReport(motifsDown_homer.df, motifs_df3_N_BMP, motifs_df3_N_VEH, gsc_
 ### export reports 
 
 ```{r export reports, eval = FALSE}
-pdf(here("Plots","2025-11-14_human_multiome_PIMOup_vs_PIMOdown_motifs_vs_G523_motifs_motif_ranking_bulk.pdf"))
+#pdf(here("Plots","2025-11-14_human_multiome_PIMOup_vs_PIMOdown_motifs_vs_G523_motifs_motif_ranking_bulk.pdf"))
+pdf(here("Plots","2025-12-08_human_multiome_PIMOup_vs_PIMOdown_motifs_vs_G523_motifs_motif_ranking_bulk.pdf"))
 # 1. H_BMP_vs_N_BMP_deseq2
 motifCompareReport(motifsUp_homer.df, motifs_df_H_BMP, motifs_df_N_BMP, gsc_title1 = "H_BMP", gsc_title2 = "N_BMP",
                    title="Human Multiome: MotifsUP in PIMOup vs PIMOdown", 
@@ -951,6 +1036,29 @@ motifCompareReport(motifsDown_homer.df, motifs_df3_N_BMP, motifs_df3_N_VEH, gsc_
 dev.off()
 
 ```
+# Motif compare old vs new (PIMO70_b added)
+```{r motif compare old vs new}
+
+# write_csv(motifsUp_homer.df, here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsUP.csv"),
+#                       col_names=TRUE)
+# write_csv(motifsDown_homer.df, here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsDown.csv"),
+#                       col_names=TRUE)
+
+write_csv(motifsUp_homer.df, here("data","bulkATAC","2025_12-08_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsUP.csv"),
+                      col_names=TRUE)
+write_csv(motifsDown_homer.df, here("data","bulkATAC","2025_12-08_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsDown.csv"),
+                      col_names=TRUE)
+
+# old vs new: motifsUP
+read_csv(here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsUP.csv"),col_names=TRUE)
+read_csv(here("data","bulkATAC","2025_12-08_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsUp.csv"),col_names=TRUE)
+
+# old vs new:  motifsDown
+read_csv(here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsDown.csv"),col_names=TRUE)
+read_csv(here("data","bulkATAC","2025_12-08_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsDown.csv"),col_names=TRUE)
+```
+Looks like the motifs enriched are similar but more significant in the new one. Slight variations in ranking too, at least for the top motifs.
+
 
 # check h5 file integrity
 ```{r check h5 files}
