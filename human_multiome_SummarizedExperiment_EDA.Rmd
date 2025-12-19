@@ -109,6 +109,18 @@ chromVarDev_homer <- readRDS(
     "chromVarDeviations_PIMOupstatus_homer.rds"
   )
 )
+
+# chromVar Positive-TF-Regulators
+chromVarDev_pos_TF_reg <- readRDS(
+  file = here(
+    "data",
+    "human_multiome",
+    "chromVarDeviations_homer_PIMO_up_status",
+    #"2025-12-01",
+    "2025-12-18",
+    "Positive-TF-Regulators_PIMOupstatus_homer.rds"
+  )
+)
 ```
 ## load custom enrichment with bulk ATAC in multiome
 Here we load the result of the custom enrichment analysis where peaks from bulk ATAC-seq were used to compare to multiome results. This was processed by `run_07b_human_multiome_CustomMotifEnrichment.sh`
@@ -1103,4 +1115,160 @@ nrow(counts3) # 98740
 
 counts2
 counts3
+```
+
+# ChromVar Positive-TF Regulators Plot
+```{r chromva positive TF regulators plot}
+class(chromVarDev_pos_TF_reg)
+colnames(chromVarDev_pos_TF_reg)
+# convert DFrame to dataframe to tibble
+chromVarDev_pos_TF_reg_df <- as_tibble(as.data.frame(chromVarDev_pos_TF_reg))
+# remove _number suffix and Add a TF column
+chromVarDev_pos_TF_reg_df$TF <- sub("_.*", "", chromVarDev_pos_TF_reg_df$MotifMatrix_homer_name) # remove the _number suffix # add a TF column
+
+
+chromVarDev_pos_TF_reg_df
+
+
+# filter based on ArchR default criteria (can also filter based on the TFRegulator == "YES")
+chromVarDev_pos_TF_reg_df %>% 
+  filter(cor > 0.5 & padj < 0.01 & maxDelta > quantile(maxDelta,0.75))
+
+# quantile threshold used
+quantile(chromVarDev_pos_TF_reg_df$maxDelta, 0.75) # 1.133545 
+
+# volcano plot
+chromVarDev_pos_TF_reg_df %>% 
+  #filter(maxDelta >= quantile(maxDelta, 0.75, na.rm = TRUE)) %>% 
+  ggplot(
+    aes(x = cor, y = maxDelta, color = TFRegulator)
+  ) +
+  geom_hline(yintercept = 0, linetype = "dotted", color = "black") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  geom_point() +
+  # Manually set the colors here
+  scale_color_manual(values = c("YES" = "red", "NO" = "grey")) +
+  labs(
+    x = "Correlation to Gene Score",
+    y = "Mean TF Motif Delta",
+    title = "Positive TF Regulators (Top Quartile)",
+    subtitle = "Human Multiome: homer PIMO_up_status"
+  ) + 
+  theme_minimal()
+
+# Volcano plot with labels
+chromVarDev_pos_TF_reg_df %>% 
+  ggplot(
+    aes(x = cor, y = maxDelta, color = TFRegulator)
+  ) +
+  geom_hline(yintercept = 0, linetype = "dotted", color = "black") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  geom_point() +
+  # Labeling only the "YES" points
+  geom_text_repel(
+    data = . %>% filter(TFRegulator == "YES"),
+    aes(label = GeneExpressionMatrix_name),
+    size = 3,
+    max.overlaps = Inf,      # Ensures all "YES" labels show up
+    box.padding = 0.5,       # Adds space around labels
+    point.padding = 0.3,     # Adds space between point and label
+    show.legend = FALSE      # Prevents an 'a' from appearing in the legend
+  ) +
+  scale_color_manual(values = c("YES" = "red", "NO" = "grey70")) +
+  labs(
+    x = "Correlation to Gene Score",
+    y = "Mean TF Motif Delta",
+    title = "Positive TF Regulators (Top Quartile)",
+    subtitle = "Human Multiome: homer PIMO_up_status"
+  ) + 
+  theme_minimal()
+
+
+
+View(chromVarDev_pos_TF_reg_df)
+```
+## custom plotting function for Positive TF regulators
+```{r custom function for postive TF regulators}
+plot_tf_regulators <- function(data, 
+                               cor_thresh = 0.5, 
+                               padj_thresh = 0.01, 
+                               delta_quantile = 0.75,
+                               title = "Positive TF Regulators") {
+  
+  # 1. Calculate the specific maxDelta value for the chosen quantile
+  cutoff_val <- quantile(data$maxDelta, delta_quantile, na.rm = TRUE)
+  
+  # 2. Create the TF_Regulator column and filter/label logic
+  plot_df <- data %>%
+    mutate(TF_Regulator = ifelse(
+      cor > cor_thresh & 
+      padj < padj_thresh & 
+      maxDelta >= cutoff_val, 
+      "YES", "NO"
+    ))
+  
+  # 3. Generate the plot
+  ggplot(plot_df, aes(x = cor, y = maxDelta, color = TF_Regulator)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+    geom_point(alpha = 0.7) +
+    # Label only the "YES" regulators
+    geom_text_repel(
+      data = . %>% filter(TF_Regulator == "YES"),
+      aes(label = GeneExpressionMatrix_name),
+      size = 3.5,
+      # 'direction = "both"' is default; "y" forces them to stay at their x-pos 
+      # but move up/down. "x" forces them to move left/right.
+      direction = "both", 
+      # Increase force to push labels further away from the data/origin
+      force = 3,
+      # nudge_x can push all labels slightly right if your cor is > 0
+      nudge_y = 0.5,
+      box.padding = 0.5,
+      point.padding = 0.3,
+      max.overlaps = Inf,
+      show.legend = FALSE
+    ) +
+    scale_color_manual(values = c("YES" = "black", "NO" = "grey80")) +
+    labs(
+      x = "Correlation to Gene Score",
+      y = "Mean TF Motif Delta",
+      title = title,
+      subtitle = paste0("Thresholds: cor > ", cor_thresh, 
+                        ", padj < ", padj_thresh, 
+                        ", maxDelta > ", delta_quantile*100, "th percentile")
+    ) + 
+    theme_minimal()
+}
+
+# Using default values
+plot_tf_regulators(chromVarDev_pos_TF_reg_df, title = "Human Multiome: homer PIMO_up_status")
+
+# using Relaxed values
+plot_tf_regulators(
+  chromVarDev_pos_TF_reg_df, 
+  cor_thresh = 0.4, 
+  padj_thresh = 0.05, 
+  delta_quantile = 0.75,
+  title = "Human Multiome: homer PIMO_up_status"
+)
+
+```
+## export to pdf
+```{r export to pdf tf regulator}
+
+pdf(here("Plots","2025-12-18_human_multiome_PIMO_up_status_PIMOup_vs_PIMOdown_Positive-TF-regulators-Motifs-Enriched_homer_labelled.pdf"))
+# Using default values
+plot_tf_regulators(chromVarDev_pos_TF_reg_df, title = "Human Multiome: homer PIMO_up_status PIMOup_vs_PIMOdown")
+
+# using Relaxed values
+plot_tf_regulators(
+  chromVarDev_pos_TF_reg_df, 
+  cor_thresh = 0.4, 
+  padj_thresh = 0.05, 
+  delta_quantile = 0.75,
+  title = "Human Multiome: homer PIMO_up_status PIMOup_vs_PIMOdown"
+)
+dev.off()
+
 ```
