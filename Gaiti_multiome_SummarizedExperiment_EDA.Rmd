@@ -1,0 +1,477 @@
+---
+title: "Gaiti_multiome_SummarizedExperiment_EDA"
+output: html_notebook
+---
+# Introduction
+
+Here we explore the SummarizedExperiment object output from peak calling script operated on the Gaiti multiome. The Granges object derived from the SE object is also explored.
+
+# Intall Libraries
+```{r install packages, eval = FALSE}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("ComplexHeatmap")
+```
+# Load Libraries
+```{r load libraries}
+# Load required libraries
+library(SummarizedExperiment)
+library(ggplot2)
+library(pheatmap)
+library(tidyverse)
+library(here)
+library(ggrepel)
+library(ComplexHeatmap)
+```
+
+# Load marker features: SummarizedExperiment and GRanges Object
+```{r load SE and GRanges from getMarkerFeatures}
+```
+
+
+# Load motifEnrichment Results
+```{r load motifEnrichment results}
+# motifSet = homer
+
+# PIMOup_EB_vs_PIMOup_TC
+motifsUp_PIMOupEBvsPIMOupTC <- readRDS(
+  file = here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOup_TC",
+    "motifsUp_PIMORegion_PIMOupEBvsPIMOupTC_homer.rds"
+  )
+)
+motifsDown_PIMOupEBvsPIMOupTC <- readRDS(
+  file = here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOup_TC",
+    "motifsDown_PIMORegion_PIMOupEBvsPIMOupTC_homer.rds"
+  )
+)
+
+# PIMOup_EB_vs_PIMOdown_EB
+motifsUp_PIMOupEBvsPIMOdownEB <- readRDS(
+  file = here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB",
+    "motifsUp_PIMORegion_PIMOupEBvsPIMOdownEB_homer.rds"
+  )
+)
+motifsDown_PIMOupEBvsPIMOdownEB <- readRDS(
+  file = here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB",
+    "motifsDown_PIMORegion_PIMOupEBvsPIMOdownEB_homer.rds"
+  )
+)
+
+# PIMOup_PT_vs_PIMOdown_PT
+motifsUp_PIMOupPTvsPIMOdownPT <- readRDS(
+  file = here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_PT_vs_PIMOdown_PT",
+    "motifsUp_PIMORegion_PIMOupPTvsPIMOdownPT_homer.rds"
+  )
+)
+motifsDown_PIMOupPTvsPIMOdownPT <- readRDS(
+  file = here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_PT_vs_PIMOdown_PT",
+    "motifsDown_PIMORegion_PIMOupPTvsPIMOdownPT_homer.rds"
+  )
+)
+
+# PIMOup_TC_vs_PIMOdown_TC
+motifsUp_PIMOupTCvsPIMOdownTC <- readRDS(
+  file = here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC",
+    "motifsUp_PIMORegion_PIMOupTCvsPIMOdownTC_homer.rds"
+  )
+)
+motifsDown_PIMOupTCvsPIMOdownTC <- readRDS(
+  file = here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC",
+    "motifsDown_PIMORegion_PIMOupTCvsPIMOdownTC_homer.rds"
+  )
+)
+```
+
+# Plot TF Rank vs Significance: PIMOup_vs_PIMOdown motifEnrichment from single cell multiome
+
+To better understand motif enrichment results, we can plot the ranking of each motif and their significance. Here we write two functions: motifsSEtoDF() which converts the SE object to a data frame, and plotMotifEnrichments() that takes the data frame and plots the Significance (-log10padj) vs TF rank. 
+
+```{r plotting function for motif enrichment rank vs Significance }
+# convert the SE to df for plotting and EDA
+motifSEtoDF <- function(motifs) {
+  # Convert to data frame for ggplot
+  df <- data.frame(TF = rownames(motifs), mlog10Padj = assay(motifs)[, 1])
+  df <- df[order(df$mlog10Padj, decreasing = TRUE), ]
+  df$rank <- seq_len(nrow(df))
+  df$TF_fixed <- sub("_.*", "", df$TF) # remove the _number suffix
+df$TF_family <- sub(".*\\.", "", df$TF_fixed) # add a TF family column based on the last suffix
+  return(df)
+}
+
+# plot TF rank vs significance
+# highlight_TF: provide a vector of TFs to highlight if needed
+plotMotifEnrichments <- function(df, highlight_TF = NULL) {
+  if (length(highlight_TF) > 0) {
+    df$highlight <- ifelse(df$TF_fixed %in% highlight_TF, "highlight", "normal")
+    gg <- ggplot(df, aes(rank, mlog10Padj)) +
+      geom_point(aes(color = highlight), size = 1.5) +
+      scale_color_manual(values = c("highlight" = "red", "normal" = "grey70")) +
+      ggrepel::geom_label_repel(
+        data = subset(df, TF_fixed %in% highlight_TF),
+        aes(x = rank, y = mlog10Padj, label = TF_fixed),
+        size = 2.5,
+        nudge_x = 150,
+        nudge_y = 50,
+        hjust = 0.5,
+        force = 5,
+        direction = "both",
+        max.overlaps = 15,
+        color = "black"
+      ) +
+      ylab("-log10(P-adj) Motif Enrichment") +
+      xlab("Rank Sorted TFs Enriched")
+
+    return(gg)
+    
+  }else
+    gg <- ggplot(df, aes(rank, mlog10Padj, color = mlog10Padj)) +
+      geom_point(size = 1.5) +
+      ggrepel::geom_label_repel(
+        data = df[rev(seq_len(15)), ],
+        aes(x = rank, y = mlog10Padj, label = TF_fixed),
+        size = 2.5,
+        nudge_x = 150,
+        nudge_y = 50,
+        hjust = 0.5,
+        force = 5,
+        direction = "both",
+        max.overlaps = 15,
+        color = "black"
+      ) +
+      ylab("-log10(P-adj) Motif Enrichment") +
+      xlab("Rank Sorted TFs Enriched")
+  
+  return(gg)
+}
+```
+
+## motifSet = homer (PIMOup_vs_PIMOdown)
+```{r plot}
+# convert SE to DF
+motifsUp_PIMOupEBvsPIMOupTC.df <- motifSEtoDF(motifsUp_PIMOupEBvsPIMOupTC)
+motifsDown_PIMOupEBvsPIMOupTC.df <- motifSEtoDF(motifsDown_PIMOupEBvsPIMOupTC)
+
+motifsUp_PIMOupEBvsPIMOdownEB.df <- motifSEtoDF(motifsUp_PIMOupEBvsPIMOdownEB)
+motifsDown_PIMOupEBvsPIMOdownEB.df <- motifSEtoDF(motifsDown_PIMOupEBvsPIMOdownEB)
+
+motifsUp_PIMOupPTvsPIMOdownPT.df <- motifSEtoDF(motifsUp_PIMOupPTvsPIMOdownPT)
+motifsDown_PIMOupPTvsPIMOdownPT.df <- motifSEtoDF(motifsDown_PIMOupPTvsPIMOdownPT)
+
+motifsUp_PIMOupTCvsPIMOdownTC.df <- motifSEtoDF(motifsUp_PIMOupTCvsPIMOdownTC)
+motifsDown_PIMOupTCvsPIMOdownTC.df <- motifSEtoDF(motifsDown_PIMOupTCvsPIMOdownTC)
+
+ggUp_homer <- plotMotifEnrichments(motifsUp_homer.df)
+ggDown_homer <- plotMotifEnrichments(motifsDown_homer.df)
+
+
+ggUp_homer + 
+  ggtitle("Enriched Motifs PIMOup vs PIMOdown", 
+          subtitle = "top 15 motifsUp homer")
+ggDown_homer +
+  ggtitle("Enriched Motifs PIMOup vs PIMOdown", 
+          subtitle = "top 15 motifsDown homer")
+
+# mouse multiome (move later)
+ggup_ms_homer +
+  ggtitle("mouse multiome")
+
+# highlight motifs of interest
+highlight_TF <- c("HIF1A","ARNT", "SOX2", "SOX3", "SOX4", 
+                  "SOX6", "SOX9", "SOX10", "SOX15", "Oct4:SOX17")
+plotMotifEnrichments(motifsUp_homer.df, highlight_TF) +
+  ggtitle("motifsUp homer")
+plotMotifEnrichments(motifsDown_homer.df, highlight_TF) +
+  ggtitle("motifsDown homer")
+```
+
+```{r homer motif cleaning function}
+# Function for additional cleaning of motifs (homer multiome syntax needs to match homer bulk-ATAC-seq)
+homer_motif_cleaning <- function(df){
+  df_cleaned <- df %>%
+  mutate(
+    TF_cleaned = TF %>%
+      # Step 1: Remove the numerical suffix (e.g., _251)
+      # "AP.1.bZIP_1" -> "AP.1.bZIP"
+      str_remove("_\\d+$") %>%
+      
+      # Step 2: Handle the specific edge cases first.
+      # "Brachyury.T.box" -> "Brachyury"
+      # "Brn2-POU" -> "Brn2"
+      str_remove("\\.T\\.box$") %>%
+      str_remove("-Homeobox$") %>%
+      
+      # Step 3: Now, handle the general case by removing the last remaining 
+      # motif identifier (e.g., .bZIP, .DR1).
+      # "AP.1.bZIP" -> "AP.1"
+      # "RXR.NR..DR1" -> "RXR.NR.."
+      str_remove("\\.[^.]+$") %>%
+      
+      # Step 4: Replace all remaining periods with hyphens.
+      # "AP.1" -> "AP-1"
+      # "RXR.NR.." -> "RXR-NR--"
+      str_replace_all("\\.", "-") %>%
+      
+      # Step 5: Final cleanup. Remove any trailing hyphens.
+      # "RXR-NR--" -> "RXR-NR"
+      str_remove("-+$") %>%
+    
+      # Step 6: Additional edge cases:
+      str_remove("-Paired$") %>%
+      str_remove("-NR$") %>%
+      str_remove("-Forkhead$") %>%
+      str_remove("-Homeobox$") %>%
+      str_remove("-POU$") %>%
+      str_replace_all("Arnt-Ahr","Arnt:Ahr") %>%
+      str_replace_all("bZIP-IRF-bZIP","bZIP:IRF") %>%
+      str_replace_all("CTCF-SatelliteElement-Zf", "CTCF-SatelliteElement") %>%
+      str_replace_all("EWS-FLI1-fusion","EWS:FLI1-fusion") %>% 
+      str_replace_all("Fox-Ebox", "Fox:Ebox") %>%
+      str_replace_all("GRE-NR","GRE") %>%
+      str_replace_all("Pit1-1bp","Pit1+1bp") %>%
+      str_replace_all("Tlx","Tlx?") %>%
+      str_replace_all("OCT-OCT","OCT:OCT") %>%
+      str_replace_all("RAR-RXR","RAR:RXR") %>%
+      str_replace_all("ZNF143-STAF","ZNF143|STAF") %>%
+      str_replace_all("OCT4-SOX2-TCF-NANOG-POU-Homeobox","OCT4-SOX2-TCF-NANOG") %>%
+      str_replace_all("(Nkx\\d+)-(\\d+)", "\\1.\\2") # for Nkxn-n, where n is any number
+  )
+return (df_cleaned)    
+}
+
+plotMotifEnrichments_new <- function(df, common_tfs_vector, show_labels = TRUE, show_labels_qty = 25, padj_threshold = 0.05) {
+  # Convert p-adj threshold to -log10 scale
+  # e.g., 0.05 becomes ~1.301
+  mlog10_thresh <- -log10(padj_threshold)
+
+  # 1. Flag common TFs
+  df <- df %>%
+    mutate(is_common = TF_cleaned %in% common_tfs_vector)
+  
+  num_is_common <- sum(df$is_common, na.rm = TRUE)
+  message(paste0("Common motifs: ", num_is_common, " out of ", nrow(df)))
+  
+  # 2. Base Plot
+  gg <- ggplot(df, aes(x = rank, y = mlog10Padj)) + 
+    # Add a horizontal line for the significance threshold
+    geom_hline(yintercept = mlog10_thresh, linetype = "dashed", color = "darkred", alpha = 0.5) +
+    geom_point(aes(color = is_common), shape = 16, size = 2, alpha = 0.8) +
+    scale_color_manual(
+      name = "Common TF", 
+      values = c(`TRUE` = "red", `FALSE` = "grey50"),
+      labels = c(`TRUE` = "Yes", `FALSE` = "No")
+    ) +
+    labs(
+      y = "-log10(P-adj) Motif Enrichment",
+      x = "Rank Sorted TFs Enriched",
+      caption = paste0("Dashed line: p-adj < ", padj_threshold)
+    ) +
+    theme_minimal() +
+    guides(color = guide_legend(override.aes = list(size = 4)))
+
+  # 3. Conditional Labeling with Threshold Filter
+  if (show_labels) {
+    # Filter for significance first
+    significant_df <- df %>% filter(mlog10Padj >= mlog10_thresh)
+    
+    # Determine which data to label (Common TFs vs Top Hits)
+    label_data <- if(any(significant_df$is_common)) {
+      significant_df %>% filter(is_common) %>% slice_head(n = show_labels_qty)
+    } else {
+      significant_df %>% slice_head(n = show_labels_qty)
+    }
+    
+    # Only attempt to add labels if there is data passing the threshold
+    if(nrow(label_data) > 0) {
+      gg <- gg + geom_text_repel(
+        data = label_data,
+        aes(label = TF_cleaned),
+        size = 3,
+        force = 10,
+        max.overlaps = 15,
+        color = "black",
+        segment.color = "grey50",
+        direction = "both",
+        nudge_x = 100,
+        nudge_y = 10,
+        box.padding = 0.5,
+        point.padding = 0.3
+      )
+    } else {
+      message("No motifs passed the padj_threshold for labeling.")
+    }
+  }
+  
+  return(gg)
+}
+
+# df1_cleaned <- homer_motif_cleaning(motifsUp_homer.df)
+```
+
+```{r}
+motifsUp_PIMOupEBvsPIMOupTC.df %>%
+            homer_motif_cleaning() %>%
+  plotMotifEnrichments_new(., common_tfs_vector=NULL) +
+  ggtitle("Gaiti Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "Top 25 Significant Motifs")
+```
+## Define plotting function
+```{r plotMotifEnrichments_final}
+plotMotifEnrichments_final <- function(df, common_tfs_vector = NULL, show_labels = TRUE, 
+                                       show_labels_qty = 25, padj_threshold = 0.05) {
+  # Convert p-adj threshold to -log10 scale
+  mlog10_thresh <- -log10(padj_threshold)
+
+  # 1. Flag common TFs and handle NULL vector
+  if(is.null(common_tfs_vector)) common_tfs_vector <- character(0)
+  df <- df %>% mutate(is_common = TF_cleaned %in% common_tfs_vector)
+  
+  # 2. Base Plot
+  gg <- ggplot(df, aes(x = rank, y = mlog10Padj)) + 
+    geom_hline(yintercept = mlog10_thresh, linetype = "dashed", color = "darkred", alpha = 0.4) +
+    geom_point(aes(color = is_common), shape = 16, size = 2, alpha = 0.7) +
+    scale_color_manual(
+      name = "Common TF", 
+      values = c(`TRUE` = "red", `FALSE` = "grey60"),
+      labels = c(`TRUE` = "Yes", `FALSE` = "No")
+    ) +
+    scale_x_continuous(expand = expansion(mult = c(0.05, 0.25))) + # Extra space for labels
+    labs(y = "-log10(P-adj) Enrichment", x = "Rank Sorted TFs") +
+    theme_minimal() +
+    theme(panel.grid.minor = element_blank())
+
+  # 3. Text Labeling (Shifted Right)
+  if (show_labels) {
+    # Only label those passing threshold
+    significant_df <- df %>% filter(mlog10Padj >= mlog10_thresh)
+    
+    label_data <- if(any(significant_df$is_common)) {
+      significant_df %>% filter(is_common) %>% slice_head(n = show_labels_qty)
+    } else {
+      significant_df %>% slice_head(n = show_labels_qty)
+    }
+    
+    if(nrow(label_data) > 0) {
+      gg <- gg + geom_text_repel(
+        data = label_data,
+        aes(label = TF_cleaned),
+        size = 3.2,
+        color = "black",
+        # Push to the right sidebar
+        force = 5,
+        nudge_x = max(df$rank, na.rm = TRUE) * 0.15,
+        direction = "y",
+        hjust = 0,
+        max.overlaps = 30,
+        box.padding = 0.3,
+        point.padding = 0.5,
+        min.segment.length = 0,
+        segment.color = "grey70"
+      )
+    }
+  }
+  return(gg)
+}
+
+```
+## plot all the conditions
+```{r plot gg plots}
+# Up-regulated
+p1 <- motifsUp_PIMOupEBvsPIMOupTC.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = NULL) +
+  ggtitle("Gaiti Multiome: Motifs UP (PIMOup_EB vs PIMOup_TC)", subtitle = "Top 25 Significantly enriched motifs")
+
+# Down-regulated
+p2 <- motifsDown_PIMOupEBvsPIMOupTC.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = NULL) +
+  ggtitle("Gaiti Multiome: Motifs Down (PIMOup_EB vs PIMOup_TC)", subtitle = "Top 25 Significantly enriched motifs")
+
+# EB Comparison
+p3 <- motifsUp_PIMOupEBvsPIMOdownEB.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = NULL) +
+  ggtitle("Gaiti Multiome: Motifs UP (PIMOup vs PIMOdown in EB)", subtitle = "Top 25 Significantly enriched motifs")
+
+p4 <- motifsDown_PIMOupEBvsPIMOdownEB.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = NULL) +
+  ggtitle("Gaiti Multiome: Motifs DOWN (PIMOup vs PIMOdown in EB)", subtitle = "Top 25 Significantly enriched motifs")
+
+# PT Comparison
+p5 <- motifsUp_PIMOupPTvsPIMOdownPT.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = NULL) +
+  ggtitle("Gaiti Multiome: Motifs UP (PIMOup vs PIMOdown in PT)", subtitle = "Top 25 Significantly enriched motifs")
+
+p6 <- motifsDown_PIMOupPTvsPIMOdownPT.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = NULL) +
+  ggtitle("Gaiti Multiome: Motifs DOWN (PIMOup vs PIMOdown in PT)", subtitle = "Top 25 Significantly enriched motifs")
+
+# TC Comparison
+p7 <- motifsUp_PIMOupTCvsPIMOdownTC.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = NULL) +
+  ggtitle("Gaiti Multiome: Motifs UP (PIMOup vs PIMOdown in TC)", subtitle = "Top 25 Significantly enriched motifs")
+
+p8 <- motifsDown_PIMOupTCvsPIMOdownTC.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = NULL) +
+  ggtitle("Gaiti Multiome: Motifs DOWN (PIMOup vs PIMOdown in TC)", subtitle = "Top 25 Significantly enriched motifs")
+
+p1
+p2
+p3
+p4
+p5
+p6
+p7
+p8
+
+```
+# export pdfs of plots
+```{r export pdfs of plots}
+library(patchwork)
+here()
+pdf(here("Plots","2025-12-19_Gaiti_multiome_PIMOup_vs_PIMOdown_PIMO_Region_homer_motif_ranking.pdf"))
+
+p1
+p2
+p1+p2
+p3
+p4
+p3+p4
+p5
+p6
+p5+p6
+p7
+p8
+p7+p8
+
+dev.off()
+```
