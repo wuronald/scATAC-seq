@@ -223,7 +223,7 @@ if (length(markerMotifs) == 0) {
     
     # Customize UMAP plots
     p_umap2 <- lapply(p_umap, function(x){
-        x + guides(color = "none", fill = "none") + 
+        x + 
         theme_ArchR(baseSize = 6.5) +
         theme(plot.margin = unit(c(0, 0, 0, 0), "cm")) +
         theme(

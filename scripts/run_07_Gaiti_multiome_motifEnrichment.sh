@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=58G
-#SBATCH --time=01:30:00
+#SBATCH --time=00:30:00
 
 # Parse command line arguments
 # First argument: motif set (homer, encode, JASPAR2020, JASPAR2018, JASPAR2016, cisbp)
