@@ -52,3 +52,5 @@ ArchRLogs/
 # RData
 *.RData
 *.rds
+# log files from venn diagram
+*.log
