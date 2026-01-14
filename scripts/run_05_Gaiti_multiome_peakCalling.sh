@@ -73,7 +73,7 @@ if (exists("findMacs2")) {
 
 # Set of ArchR object metadata columns to iterate over for peak calling
 # groupBy_list <- c("hybrid_pair", "PIMO_up_status","PIMO_Region") # hybrid_pair has NAs causing issues atm
-groupBy_list <- c("PIMO_up_status","PIMO_Region")
+groupBy_list <- c("PIMO_up_status","PIMO_Region","Region.annotation")
 
 print(paste("GroupBy list:", paste(groupBy_list, collapse = ", ")))
 
@@ -259,6 +259,79 @@ markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", 
 print(paste("Saved markerTest as .rds for PIMO_Region PIMOup_PT vs PIMOdown_PT" ))
 saveRDS(markerTest_GR, file = "Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_GR_PIMO_Region_PIMOup_PT_vs_PIMOdown_PT.rds")
 
+print("Number of markerTest peaks identified per group:")
+print(sapply(markerTest_GR, length))
+
+# pairwise test between Region.annotation groups:
+# 1. EB vs TC
+print("Pairwise test between Region.annotation groups: EB vs TC") 
+markerTest <- getMarkerFeatures(
+  ArchRProj = proj_hyp2, 
+  useMatrix = "PeakMatrix",
+  groupBy = "Region.annotation",
+  testMethod = "wilcoxon",
+  bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
+  useGroups = "EB",
+  bgdGroups = "TC"
+)
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for Region.annotation :", "EB vs TC" ))
+saveRDS(markerTest, file = paste0("Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_Region.annotation_", "EB_vs_TC", ".rds"))
+# extract markerTest GR object for Region.annotation groups
+print("Extracting markerTestGR object for Region.annotation")
+markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <=  1 & abs(Log2FC) >= 0", returnGR = TRUE)
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for Region.annotation EB vs TC" ))
+saveRDS(markerTest_GR, file = "Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_GR_Region.annotation_EB_vs_TC.rds")
+print("Number of markerTest peaks identified per group:")
+print(sapply(markerTest_GR, length))
+
+# 2. EB vs PT
+print("Pairwise test between Region.annotation groups: EB vs PT")
+markerTest <- getMarkerFeatures(
+  ArchRProj = proj_hyp2, 
+  useMatrix = "PeakMatrix",
+  groupBy = "Region.annotation",
+  testMethod = "wilcoxon",
+  bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
+  useGroups = "EB",
+  bgdGroups = "PT"
+)
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for Region.annotation :", "EB vs PT"))
+saveRDS(markerTest, file = paste0("Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_Region.annotation_EB_vs_PT.rds"))
+
+# extract markerTest GR object for Region.annotation groups
+print("Extracting markerTestGR object for Region.annotation")
+markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
+
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for Region.annotation EB vs PT"))
+saveRDS(markerTest_GR, file = "Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_GR_Region.annotation_EB_vs_PT.rds")
+
+print("Number of markerTest peaks identified per group:")
+print(sapply(markerTest_GR, length))
+
+# 3. TC vs PT
+print("Pairwise test between Region.annotation groups: TC vs PT")
+markerTest <- getMarkerFeatures(
+  ArchRProj = proj_hyp2, 
+  useMatrix = "PeakMatrix",
+  groupBy = "Region.annotation",
+  testMethod = "wilcoxon",
+  bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
+  useGroups = "TC",
+  bgdGroups = "PT"
+)
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for Region.annotation :", "TC vs PT"))
+saveRDS(markerTest, file = paste0("Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_Region.annotation_TC_vs_PT.rds"))
+# extract markerTest GR object for Region.annotation groups
+print("Extracting markerTestGR object for Region.annotation")
+markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for Region.annotation TC vs PT"))
+saveRDS(markerTest_GR, file = "Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_GR_Region.annotation_TC_vs_PT.rds")
 print("Number of markerTest peaks identified per group:")
 print(sapply(markerTest_GR, length))
 

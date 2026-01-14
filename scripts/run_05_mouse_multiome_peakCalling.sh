@@ -5,8 +5,8 @@
 #SBATCH --partition=himem
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=18
-#SBATCH --mem=60G
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=58G
 #SBATCH --time=03:00:00
 
 # Load necessary modules (adjust as needed for your system)
@@ -24,7 +24,7 @@ library(here)
 set.seed(1)
 
 # Set the number of threads for ArchR
-addArchRThreads(threads = 18)
+addArchRThreads(threads = 8)
 
 # set genome to mm10
 addArchRGenome("mm10")
@@ -136,7 +136,45 @@ print(paste("Get marker peaks for", groupBy, "groups"))
 print(paste("Saved markersPeaks as .rds for", groupBy))
 saveRDS(markersPeaks, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_", groupBy, ".rds"))
 
+# Save the markersPeaks GR object for easier load in the future
+print(paste("Saved markersPeaks GR as .rds for", groupBy))
+markersPeaks_GR <- getMarkers(markersPeaks, cutOff = "FDR <=  1 & abs(Log2FC) >= 0", returnGR = TRUE)
+saveRDS(markersPeaks_GR, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersPeaks_GR_", groupBy, ".rds"))
+
 }
+# pairwise test between PIMO_up_status groups: PIMOup vs PIMOdown:
+
+# Check if PIMO_up_status exists in groupBy_list
+if("PIMO_up_status" %in% groupBy_list) {
+print("Pairwise test between PIMO_up_status groups: PIMOup vs PIMOdown")
+
+markerTest <- getMarkerFeatures(
+  ArchRProj = proj_hyp2, 
+  useMatrix = "PeakMatrix",
+  groupBy = "PIMO_up_status",
+  testMethod = "wilcoxon",
+  bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
+  useGroups = "PIMOup",
+  bgdGroups = "PIMOdown"
+)
+# Save the markerTest SE object for easier load in the future
+print(paste("Saved markerTest as .rds for PIMO_up_status PIMOup vs PIMOdown" ))
+saveRDS(markerTest, file = paste0("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersTest_PIMO_up_status_", "PIMOup_vs_PIMOdown", ".rds"))
+
+# extract markerTest GR object for PIMO_up_status groups
+print("Extracting markerTestGR object for PIMO_up_status")
+markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
+
+print("Number of markerTest peaks identified per group:")
+print(sapply(markerTest_GR, length))
+
+saveRDS(markerTest_GR, file = "mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/markersTest_GR_PIMO_up_status_PIMOup_vs_PIMOdown.rds")
+
+} else {
+  warning("PIMO_up_status not found in groupBy_list; skipping pairwise test.")
+  print("PIMO_up_status not found in groupBy_list; skipping pairwise test.")
+}
+
 # Save the project after each groupBy
 proj_hyp2 <- saveArchRProject(ArchRProj = proj_hyp2, outputDirectory = "mouse_multiome_harmony_merged_malig_peak_subset", load = TRUE)
 EOF
