@@ -11,15 +11,19 @@
 
 # Parse command line arguments
 # First argument: motif set (homer, encode, JASPAR2020, JASPAR2018, JASPAR2016, cisbp)
-# Second argument: groupBy variable (e.g., "PIMO_up_status", "PIMO_Region")
-# Third argument: comparison name (e.g., "PIMOup_vs_PIMOdown", "PIMOup_EB_vs_PIMOup_TC", "PIMOup_EB_vs_PIMOdown_EB")
+# Second argument: groupBy variable (e.g., "PIMO_up_status", "PIMO_Region", "Region.annotation")
+# Third argument: comparison name (e.g., "PIMOup_vs_PIMOdown", "PIMOup_EB_vs_PIMOup_TC", "EB_vs_TC")
 #                 If not provided, defaults based on GROUP_BY:
 #                   - PIMO_up_status -> PIMOup_vs_PIMOdown
 #                   - PIMO_Region -> PIMOup_EB_vs_PIMOup_TC
+#                   - Region.annotation -> EB_vs_TC
 # Example usage:
 # sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer PIMO_up_status PIMOup_vs_PIMOdown
 # sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer PIMO_Region PIMOup_EB_vs_PIMOup_TC
 # sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh cisbp PIMO_Region PIMOup_EB_vs_PIMOdown_EB
+# sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer Region.annotation EB_vs_TC
+# sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer Region.annotation EB_vs_PT
+# sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer Region.annotation TC_vs_PT
 
 MOTIF_SET="${1:-homer}"  # Default to "homer" if no argument provided
 GROUP_BY="${2:-PIMO_Region}"  # Default to "PIMO_Region" if no argument provided
@@ -28,6 +32,8 @@ GROUP_BY="${2:-PIMO_Region}"  # Default to "PIMO_Region" if no argument provided
 if [ -z "$3" ]; then
     if [ "$GROUP_BY" == "PIMO_up_status" ]; then
         COMPARISON="PIMOup_vs_PIMOdown"
+    elif [ "$GROUP_BY" == "Region.annotation" ]; then
+        COMPARISON="EB_vs_TC"
     else
         COMPARISON="PIMOup_EB_vs_PIMOup_TC"
     fi
@@ -76,7 +82,7 @@ proj <- loadArchRProject(path = "Gaiti_multiome_harmony_merged_malig_peak")
 
 # Create file naming prefix based on groupBy variable and comparison
 # Replace underscores and special chars to create clean file names
-filePrefix <- paste0(gsub("_", "", groupBy), "_", gsub("_", "", comparison))
+filePrefix <- paste0(gsub("_|\\.", "", groupBy), "_", gsub("_", "", comparison))
 
 # Load and assign appropriate PeakSet based on groupBy
 peakSetPath <- paste0("/cluster/projects/wouterslab/ArchR103_4/Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/PeakSet_gr_", groupBy, ".rds")
@@ -120,6 +126,12 @@ if (file.exists(markersTest_rds)) {
                    "\n  - PIMOup_EB_vs_PIMOdown_EB", 
                    "\n  - PIMOup_TC_vs_PIMOdown_TC",
                    "\n  - PIMOup_PT_vs_PIMOdown_PT"))
+    } else if (groupBy == "Region.annotation") {
+        stop(paste("markerTest file not found:", markersTest_rds, 
+                   "\nFor Region.annotation, available comparisons should be:",
+                   "\n  - EB_vs_TC",
+                   "\n  - EB_vs_PT",
+                   "\n  - TC_vs_PT"))
     } else {
         stop(paste("markerTest file not found:", markersTest_rds))
     }
