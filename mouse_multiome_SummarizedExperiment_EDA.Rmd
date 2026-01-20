@@ -1,15 +1,15 @@
 ---
-title: "Gaiti_multiome_SummarizedExperiment_EDA"
+title: "mouse_multiome_SummarizedExperiment_EDA"
 output: html_notebook
 ---
 # Introduction
-
+  
 Here we explore the SummarizedExperiment object output from peak calling script operated on the Gaiti multiome. The Granges object derived from the SE object is also explored.
 
 # Intall Libraries
 ```{r install packages, eval = FALSE}
 if (!require("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
+  install.packages("BiocManager")
 
 BiocManager::install("ComplexHeatmap")
 ```
@@ -29,94 +29,55 @@ library(ComplexHeatmap)
 ```{r load SE and GRanges from getMarkerFeatures}
 ```
 
-
 # Load motifEnrichment Results
-Here we load the motifEnrichment results (rds files) from running the following script on the computing cluster: `run_07_Gaiti_multiome_motifEnrichment.sh`. The RDS files hold the SummarizedExperiment object.
-
-Note this script takes three parameters:
-1. motif set: eg. homer
-2. groupBy variable: eg. PIMO_Region
-3. comparison name: eg. "PIMOup_EB_vs_PIMOup_TC"
 
 ```{r load motifEnrichment results}
 # #####################
 # motifSet = homer
-# groupBy = PIMO_Region
+# groupBy = PIMO_up_status
 #######################
 
-# PIMOup_EB_vs_PIMOup_TC
-motifsUp_PIMOupEBvsPIMOupTC <- readRDS(
+# PIMO_up_status
+
+ms_motifsUp_homer <- readRDS(
   file = here(
     "data",
-    "Gaiti_multiome",
-    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOup_TC",
-    "motifsUp_PIMORegion_PIMOupEBvsPIMOupTC_homer.rds"
+    "mouse_multiome",
+    "motifEnrichment_homer_PIMO_up_status",
+    "motifsUp_PIMOupstatus_homer.rds"
   )
 )
-motifsDown_PIMOupEBvsPIMOupTC <- readRDS(
+ms_motifsDown_homer <- readRDS(
   file = here(
     "data",
-    "Gaiti_multiome",
-    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOup_TC",
-    "motifsDown_PIMORegion_PIMOupEBvsPIMOupTC_homer.rds"
+    "mouse_multiome",
+    "motifEnrichment_homer_PIMO_up_status",
+    "motifsDown_PIMOupstatus_homer.rds"
   )
 )
 
-# PIMOup_EB_vs_PIMOdown_EB
-motifsUp_PIMOupEBvsPIMOdownEB <- readRDS(
+# PIMO_up_status Pairwise comparison (PIMOup vs PIMOdown)
+
+ms_motifsUp_homer_pw <- readRDS(
   file = here(
     "data",
-    "Gaiti_multiome",
-    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB",
-    "motifsUp_PIMORegion_PIMOupEBvsPIMOdownEB_homer.rds"
+    "mouse_multiome",
+    "motifEnrichment_homer_PIMO_up_status_PIMOup_vs_PIMOdown",
+    "motifsUp_PIMOupstatus_PIMOupvsPIMOdown_homer.rds"
   )
 )
-motifsDown_PIMOupEBvsPIMOdownEB <- readRDS(
+ms_motifsDown_homer_pw <- readRDS(
   file = here(
     "data",
-    "Gaiti_multiome",
-    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB",
-    "motifsDown_PIMORegion_PIMOupEBvsPIMOdownEB_homer.rds"
+    "mouse_multiome",
+    "motifEnrichment_homer_PIMO_up_status_PIMOup_vs_PIMOdown",
+    "motifsDown_PIMOupstatus_PIMOupvsPIMOdown_homer.rds"
   )
 )
 
-# PIMOup_PT_vs_PIMOdown_PT
-motifsUp_PIMOupPTvsPIMOdownPT <- readRDS(
-  file = here(
-    "data",
-    "Gaiti_multiome",
-    "motifEnrichment_homer_PIMO_Region_PIMOup_PT_vs_PIMOdown_PT",
-    "motifsUp_PIMORegion_PIMOupPTvsPIMOdownPT_homer.rds"
-  )
-)
-motifsDown_PIMOupPTvsPIMOdownPT <- readRDS(
-  file = here(
-    "data",
-    "Gaiti_multiome",
-    "motifEnrichment_homer_PIMO_Region_PIMOup_PT_vs_PIMOdown_PT",
-    "motifsDown_PIMORegion_PIMOupPTvsPIMOdownPT_homer.rds"
-  )
-)
-
-# PIMOup_TC_vs_PIMOdown_TC
-motifsUp_PIMOupTCvsPIMOdownTC <- readRDS(
-  file = here(
-    "data",
-    "Gaiti_multiome",
-    "motifEnrichment_homer_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC",
-    "motifsUp_PIMORegion_PIMOupTCvsPIMOdownTC_homer.rds"
-  )
-)
-motifsDown_PIMOupTCvsPIMOdownTC <- readRDS(
-  file = here(
-    "data",
-    "Gaiti_multiome",
-    "motifEnrichment_homer_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC",
-    "motifsDown_PIMORegion_PIMOupTCvsPIMOdownTC_homer.rds"
-  )
-)
+class(ms_motifsUp_homer)
+class(ms_motifsUp_homer_pw)
 ```
-
 # Plot TF Rank vs Significance: PIMOup_vs_PIMOdown motifEnrichment from single cell multiome
 
 To better understand motif enrichment results, we can plot the ranking of each motif and their significance. 
@@ -184,30 +145,30 @@ plotMotifEnrichments <- function(df, highlight_TF = NULL) {
 }
 ```
 
-## motifSet = homer (PIMO_Region comparisons)
+## motifSet = homer (PIMO_up_status comparisons)
 ```{r plot}
 # convert SE to DF
-motifsUp_PIMOupEBvsPIMOupTC.df <- motifSEtoDF(motifsUp_PIMOupEBvsPIMOupTC)
-motifsDown_PIMOupEBvsPIMOupTC.df <- motifSEtoDF(motifsDown_PIMOupEBvsPIMOupTC)
+ms_motifsUp_homer.df <- motifSEtoDF(ms_motifsUp_homer)
+ms_motifsDown_homer.df <- motifSEtoDF(ms_motifsDown_homer)
 
-motifsUp_PIMOupEBvsPIMOdownEB.df <- motifSEtoDF(motifsUp_PIMOupEBvsPIMOdownEB)
-motifsDown_PIMOupEBvsPIMOdownEB.df <- motifSEtoDF(motifsDown_PIMOupEBvsPIMOdownEB)
-
-motifsUp_PIMOupPTvsPIMOdownPT.df <- motifSEtoDF(motifsUp_PIMOupPTvsPIMOdownPT)
-motifsDown_PIMOupPTvsPIMOdownPT.df <- motifSEtoDF(motifsDown_PIMOupPTvsPIMOdownPT)
-
-motifsUp_PIMOupTCvsPIMOdownTC.df <- motifSEtoDF(motifsUp_PIMOupTCvsPIMOdownTC)
-motifsDown_PIMOupTCvsPIMOdownTC.df <- motifSEtoDF(motifsDown_PIMOupTCvsPIMOdownTC)
-
+ms_motifsUp_homer_pw.df <- motifSEtoDF(ms_motifsUp_homer_pw)
+ms_motifsDown_homer_pw.df <- motifSEtoDF(ms_motifsDown_homer_pw)
 
 # highlight motifs of interest
 highlight_TF <- c("HIF1A","ARNT", "SOX2", "SOX3", "SOX4", 
                   "SOX6", "SOX9", "SOX10", "SOX15", "Oct4:SOX17")
-plotMotifEnrichments(motifsUp_PIMOupEBvsPIMOupTC.df, highlight_TF) +
+
+plotMotifEnrichments(ms_motifsUp_homer.df, highlight_TF) +
   ggtitle("motifsUp homer")
-plotMotifEnrichments(motifsDown_PIMOupEBvsPIMOupTC.df, highlight_TF) +
+plotMotifEnrichments(ms_motifsDown_homer.df, highlight_TF) +
+  ggtitle("motifsDown homer")
+
+plotMotifEnrichments(ms_motifsUp_homer_pw.df, highlight_TF) +
+  ggtitle("motifsUp homer")
+plotMotifEnrichments(ms_motifsDown_homer_pw.df, highlight_TF) +
   ggtitle("motifsDown homer")
 ```
+
 ## homer motif cleaning
 ```{r homer motif cleaning function}
 # Function for additional cleaning of motifs (homer multiome syntax needs to match homer bulk-ATAC-seq)
@@ -339,10 +300,10 @@ plotMotifEnrichments_new <- function(df,
 
 ## Test motif cleaning and new plotting function 
 ```{r}
-motifsUp_PIMOupEBvsPIMOupTC.df %>%
+ms_motifsUp_homer.df %>%
             homer_motif_cleaning() %>%
   plotMotifEnrichments_new(., common_tfs_vector=NULL) +
-  ggtitle("Gaiti Multiome: MotifsUP in PIMOup vs PIMOdown", subtitle = "Top 25 Significant Motifs")
+  ggtitle("Mouse Multiome: MotifsUP in PIMO_up_status", subtitle = "Top 25 Significant Motifs")
 ```
 
 ## Define final plotting function
@@ -410,90 +371,44 @@ plotMotifEnrichments_final <- function(df,
 }
 
 ```
-## plot all the conditions
-```{r plot gg plots}
-# Up-regulated
-p1 <- motifsUp_PIMOupEBvsPIMOupTC.df %>%
+
+## plot: motifEnrichment pairwise
+```{r plot pairwise motif ranks}
+motif_summary
+
+p1 <- ms_motifsUp_homer_pw.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = "NULL") +
+  ggtitle("Mouse Multiome: Motifs Up (PIMOup vs PIMOdown)", 
+          subtitle = "Top 25 Significantly enriched motifs"
+          )
+
+p2 <- ms_motifsDown_homer_pw.df %>%
   homer_motif_cleaning() %>%
   plotMotifEnrichments_final(common_tfs_vector = NULL) +
-  ggtitle("Gaiti Multiome: Motifs UP (PIMOup_EB vs PIMOup_TC)", subtitle = "Top 25 Significantly enriched motifs")
-
-# Down-regulated
-p2 <- motifsDown_PIMOupEBvsPIMOupTC.df %>%
-  homer_motif_cleaning() %>%
-  plotMotifEnrichments_final(common_tfs_vector = NULL) +
-  ggtitle("Gaiti Multiome: Motifs Down (PIMOup_EB vs PIMOup_TC)", subtitle = "Top 25 Significantly enriched motifs")
-
-# EB Comparison
-p3 <- motifsUp_PIMOupEBvsPIMOdownEB.df %>%
-  homer_motif_cleaning() %>%
-  plotMotifEnrichments_final(common_tfs_vector = NULL) +
-  ggtitle("Gaiti Multiome: Motifs UP (PIMOup vs PIMOdown in EB)", subtitle = "Top 25 Significantly enriched motifs")
-
-p4 <- motifsDown_PIMOupEBvsPIMOdownEB.df %>%
-  homer_motif_cleaning() %>%
-  plotMotifEnrichments_final(common_tfs_vector = NULL) +
-  ggtitle("Gaiti Multiome: Motifs DOWN (PIMOup vs PIMOdown in EB)", subtitle = "Top 25 Significantly enriched motifs")
-
-# PT Comparison
-p5 <- motifsUp_PIMOupPTvsPIMOdownPT.df %>%
-  homer_motif_cleaning() %>%
-  plotMotifEnrichments_final(common_tfs_vector = NULL) +
-  ggtitle("Gaiti Multiome: Motifs UP (PIMOup vs PIMOdown in PT)", subtitle = "Top 25 Significantly enriched motifs")
-
-p6 <- motifsDown_PIMOupPTvsPIMOdownPT.df %>%
-  homer_motif_cleaning() %>%
-  plotMotifEnrichments_final(common_tfs_vector = NULL) +
-  ggtitle("Gaiti Multiome: Motifs DOWN (PIMOup vs PIMOdown in PT)", subtitle = "Top 25 Significantly enriched motifs")
-
-# TC Comparison
-p7 <- motifsUp_PIMOupTCvsPIMOdownTC.df %>%
-  homer_motif_cleaning() %>%
-  plotMotifEnrichments_final(common_tfs_vector = NULL) +
-  ggtitle("Gaiti Multiome: Motifs UP (PIMOup vs PIMOdown in TC)", subtitle = "Top 25 Significantly enriched motifs")
-
-p8 <- motifsDown_PIMOupTCvsPIMOdownTC.df %>%
-  homer_motif_cleaning() %>%
-  plotMotifEnrichments_final(common_tfs_vector = NULL) +
-  ggtitle("Gaiti Multiome: Motifs DOWN (PIMOup vs PIMOdown in TC)", subtitle = "Top 25 Significantly enriched motifs")
-
+  ggtitle("Mouse Multiome: Motifs Down (PIMOup vs PIMOdown)", 
+          subtitle = "Top 25 Significantly enriched motifs"
+          )
 p1
 p2
-p3
-p4
-p5
-p6
-p7
-p8
-
 ```
+
 # export pdfs of plots
 ```{r export pdfs of plots, eval = FALSE}
 library(patchwork)
 here()
-pdf(here("Plots","2025-12-19_Gaiti_multiome_PIMOup_vs_PIMOdown_PIMO_Region_homer_motif_ranking.pdf"))
+pdf(here("Plots","2026-01-19_mouse_multiome_PIMOup_vs_PIMOdown_PIMO_up_status_homer_motif_ranking.pdf"))
 
 p1
 p2
 p1+p2
-p3
-p4
-p3+p4
-p5
-p6
-p5+p6
-p7
-p8
-p7+p8
+
 
 dev.off()
 ```
 
 # Summarize significant motifs and compare across PIMO_Region conditions
 ```{r motif summary}
-motifsUp_PIMOupEBvsPIMOupTC.df %>%
-  homer_motif_cleaning() %>% nrow()
-
 motif_summary <- function(df, padj_threshold=0.05){
 # Convert p-adj threshold to -log10 scale
   # e.g., 0.05 becomes ~1.301
@@ -519,140 +434,48 @@ return(sig_motif) # returns a vector of the significant motifs
 
 }
 
-
-
 # significant motifs for each comparison padj < 0.05
-motif_summary(motifsUp_PIMOupEBvsPIMOupTC.df) # 14
-motif_summary(motifsDown_PIMOupEBvsPIMOupTC.df) # 36
+motif_summary(ms_motifsUp_homer_pw.df) # 156
+motif_summary(ms_motifsDown_homer_pw.df) # 91
 
-motif_summary(motifsUp_PIMOupEBvsPIMOdownEB.df) # 26
-motif_summary(motifsDown_PIMOupEBvsPIMOdownEB.df) # 0
-
-motif_summary(motifsUp_PIMOupPTvsPIMOdownPT.df) # 0
-motif_summary(motifsDown_PIMOupPTvsPIMOdownPT.df) # 0
-
-motif_summary(motifsUp_PIMOupTCvsPIMOdownTC.df) # 158
-motif_summary(motifsDown_PIMOupTCvsPIMOdownTC.df) # 49
+# check if motifs overlap between up and down
+# this can happen sometimes
+print("overlap between motifs up and motifs down")
+intersect(motif_summary(ms_motifsUp_homer_pw.df),
+          motif_summary(ms_motifsDown_homer_pw.df) 
+)# 23
 ```
-## Venn Diagram:
-### motifsUp
-```{r venn diagram for motifs}
-library(VennDiagram)
-library(RColorBrewer)
-myColours <- brewer.pal(3,"Pastel2") # colors
+Some motifs in common are:
+1. Sox (SOX2, SOX3, SOX4)
+2. ATF (ATF2, ATF4)
+and other TFs
 
-# list of significant motifs
-motifsUp_lt <- list(
-  PIMOupEBvsPIMOupTC = motif_summary(motifsUp_PIMOupEBvsPIMOupTC.df),
-  PIMOupEBvsPIMOdownEB = motif_summary(motifsUp_PIMOupEBvsPIMOdownEB.df),
-  PIMOupTCvsPIMOdownTC = motif_summary(motifsUp_PIMOupTCvsPIMOdownTC.df)
-)
+# Export motifs to compare to human multiome
+```{r export motifs}
 
-motifsDown_lt <- list(
-  PIMOupEBvsPIMOupTC = motif_summary(motifsDown_PIMOupEBvsPIMOupTC.df),
-  PIMOupEBvsPIMOdownEB = motif_summary(motifsDown_PIMOupEBvsPIMOdownEB.df),
-  PIMOupTCvsPIMOdownTC = motif_summary(motifsDown_PIMOupTCvsPIMOdownTC.df)
-)
+motif_summary(ms_motifsUp_homer_pw.df) %>% 
+  as_tibble() %>% 
+  write_csv(
+     here(
+    "data",
+    "mouse_multiome",
+    "motifEnrichment_homer_PIMO_up_status_PIMOup_vs_PIMOdown",
+    "motifsUp_PIMOupstatus_PIMOupvsPIMOdown_homer_padj_lt_05.csv"
+     ),
+    col_names = FALSE
+  )
 
-grid.newpage()
-pushViewport(viewport(width=unit(0.8, "npc"), height = unit(0.8, "npc")))
-venn.diagram(
-  motifsUp_lt,
-  NULL,
-  fill = myColours[1:3],
-  cex = 2,
-  cat.cex = 0.6,
-  lty = "blank",
-  category.names = c(
-    "PIMOupEBvsPIMOupTC",
-    "PIMOupEBvsPIMOdownEB",
-    "PIMOupTCvsPIMOdownTC"
-  ),
-  cat.default.pos = "outer",
-  main = "Gaiti_multiome: PIMO_Region motifsUp"
-) %>%
-grid.draw()
+motif_summary(ms_motifsDown_homer_pw.df) %>% 
+  as_tibble() %>% 
+  write_csv(
+     here(
+    "data",
+    "mouse_multiome",
+    "motifEnrichment_homer_PIMO_up_status_PIMOup_vs_PIMOdown",
+    "motifsDown_PIMOupstatus_PIMOupvsPIMOdown_homer_padj_lt_05.csv"
+     ),
+    col_names = FALSE
+  )
 
-grid.newpage()
-pushViewport(viewport(width=unit(0.8, "npc"), height = unit(0.8, "npc")))
-venn.diagram(
-  motifsDown_lt,
-  NULL,
-  fill = myColours[1:3],
-  cex = 2,
-  cat.cex = 0.6,
-  lty = "blank",
-  category.names = c(
-    "PIMOupEBvsPIMOupTC",
-    "PIMOupEBvsPIMOdownEB",
-    "PIMOupTCvsPIMOdownTC"
-  ),
-  cat.default.pos = "outer",
-  main = "Gaiti_multiome: PIMO_Region motifsDown"
-) %>%
-grid.draw()
-  
 
 ```
-### motifsDown
-
-
-### Export pdf of venn diagram
-```{r export pdf venn, eval = FALSE}
-pdf(here("Plots","2026-01-05_Gaiti_multiome_motifsUP_PIMOup_vs_PIMOdown_PIMO_Region_Venn.pdf"))
-grid.newpage()
-pushViewport(viewport(width=unit(0.8, "npc"), height = unit(0.8, "npc")))
-venn.diagram(
-  motifsUp_lt,
-  NULL,
-  fill = myColours[1:3],
-  cex = 2,
-  cat.cex = 0.6,
-  lty = "blank",
-  category.names = c(
-    "PIMOupEBvsPIMOupTC",
-    "PIMOupEBvsPIMOdownEB",
-    "PIMOupTCvsPIMOdownTC"
-  ),
-  cat.default.pos = "outer",
-  main = "Gaiti_multiome: PIMO_Region motifsUp"
-) %>%
-grid.draw()
-
-
-dev.off()
-
-pdf(here("Plots","2026-01-08_Gaiti_multiome_motifsDown_PIMOup_vs_PIMOdown_PIMO_Region_Venn.pdf"))
-grid.newpage()
-pushViewport(viewport(width=unit(0.8, "npc"), height = unit(0.8, "npc")))
-venn.diagram(
-  motifsDown_lt,
-  NULL,
-  fill = myColours[1:3],
-  cex = 2,
-  cat.cex = 0.6,
-  lty = "blank",
-  category.names = c(
-    "PIMOupEBvsPIMOupTC",
-    "PIMOupEBvsPIMOdownEB",
-    "PIMOupTCvsPIMOdownTC"
-  ),
-  cat.default.pos = "outer",
-  main = "Gaiti_multiome: PIMO_Region motifsDown"
-) %>%
-grid.draw()
-
-
-dev.off()
-```
-## Extract Overlaps from Venn diagram
-
-```{r extract overlaps}
-overlaps <- calculate.overlap(motifsUp_lt)
-print(overlaps)
-
-calculate.overlap(motifsDown_lt) %>%
-print()
-```
-
-

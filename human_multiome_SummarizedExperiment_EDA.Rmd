@@ -411,6 +411,38 @@ Note: mlog10Padj means minus log10(adjusted p-value). For Padj < 0.05, we expect
 
 HIFs are ranked in the bottom 200s/332 from the chromVarDev_homer
 
+# Summarize significant motifs and compare across conditions
+```{r motif summary}
+
+motif_summary <- function(df, padj_threshold=0.05){
+# Convert p-adj threshold to -log10 scale
+  # e.g., 0.05 becomes ~1.301
+  mlog10_thresh <- -log10(padj_threshold)
+  
+  df <- homer_motif_cleaning(df) # clean motifs
+  num_motif <- nrow(df) # count motifs
+
+print(paste("The number of motifs in this df is:", num_motif))
+
+num_sig_motif <- df %>%
+  filter(mlog10Padj > mlog10_thresh) %>% nrow
+
+print(paste("The number of significant motifs padj<",padj_threshold, "is", num_sig_motif))
+
+# return the significant motifs
+
+sig_motif <- df %>% 
+  filter(mlog10Padj > mlog10_thresh) %>%
+  pull(TF_cleaned)
+
+return(sig_motif) # returns a vector of the significant motifs
+
+}
+
+# significant motifs for each comparison padj < 0.05
+
+```
+
 # Plot: MA and Volcano
 
 Here we plot the marker peaks using the function implementated from ArchR
@@ -965,8 +997,8 @@ motifs_df3_N_VEH <- motifs_df3 %>%
 
 # Function
 # multiome_df dataframe with human multiome homer motif results 
-# gsc_motif_df_1
-# gsc_motif_df_2
+# gsc_motif_df_1 dataframe from GSC # 1
+# gsc_motif_df_2 dataframe from GSC # 2
 motifCompareReport <- function(multiome_motif_df, gsc_motif_df_1, gsc_motif_df_2,
                                gsc_title1="", gsc_title2="", title="Ranked Motif Plot", subtitle=""){
   # clean multiome motifs
@@ -1048,8 +1080,10 @@ motifCompareReport(motifsDown_homer.df, motifs_df3_N_BMP, motifs_df3_N_VEH, gsc_
 dev.off()
 
 ```
-# Motif compare old vs new (PIMO70_b added)
-```{r motif compare old vs new}
+
+# Motif Compare old vs new (PIMO70_b added)
+
+```{r motif compare old vs new, eval = FALSE}
 
 # write_csv(motifsUp_homer.df, here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsUP.csv"),
 #                       col_names=TRUE)
@@ -1070,6 +1104,186 @@ read_csv(here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HO
 read_csv(here("data","bulkATAC","2025_12-08_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsDown.csv"),col_names=TRUE)
 ```
 Looks like the motifs enriched are similar but more significant in the new one. Slight variations in ranking too, at least for the top motifs.
+
+# Motif Compare: Mouse Multiome
+Here we load the significant motifs (padj < 0.05) from pairwise comparison of homer motifs for PIMO_up_status (PIMOup vs PIMOdown).
+## Motif Rank plot
+```{r compare to mouse multiome}
+# load mouse multiome sig motifs (from PIMOup vs PIMOdown PIMO_up_status)
+ms_motifsUp_homer_pw.sig <- read_csv(
+     here(
+    "data",
+    "mouse_multiome",
+    "motifEnrichment_homer_PIMO_up_status_PIMOup_vs_PIMOdown",
+    "motifsUp_PIMOupstatus_PIMOupvsPIMOdown_homer_padj_lt_05.csv"
+     ),
+    col_names = FALSE
+) %>% pull()
+ms_motifsDown_homer_pw.sig <- read_csv(
+     here(
+    "data",
+    "mouse_multiome",
+    "motifEnrichment_homer_PIMO_up_status_PIMOup_vs_PIMOdown",
+    "motifsDown_PIMOupstatus_PIMOupvsPIMOdown_homer_padj_lt_05.csv"
+     ),
+    col_names = FALSE
+) %>% pull()
+
+
+# plot
+motifsUp_homer.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = ms_motifsUp_homer_pw.sig) +
+    ggtitle("Human Multiome: Motifs Up (PIMOup vs PIMOdown) in common with Mouse Multiome", 
+          subtitle = "Top 25 Significantly enriched motifs"
+          )
+
+motifsDown_homer.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = ms_motifsDown_homer_pw.sig) +
+  ggtitle("Human Multiome: Motifs Down (PIMOup vs PIMOdown) in common with Mouse Multiome", 
+          subtitle = "Top 25 Significantly enriched motifs"
+          )
+
+# intersect motifs
+intersect(motifsUp_homer.df %>%
+  homer_motif_cleaning() %>% pull(TF_cleaned),
+  ms_motifsUp_homer_pw.sig
+  )
+
+intersect(motifsUp_homer.df %>%
+  homer_motif_cleaning() %>% pull(TF_cleaned),
+  ms_motifsUp_homer_pw.sig
+  )
+```
+## Venn Diagram:
+### motifsUp and motifsDown
+```{r venn diagram for motifs}
+library(VennDiagram)
+library(RColorBrewer)
+myColours <- brewer.pal(2,"Pastel2") # colors
+
+# list of significant motifs
+motifsUp_lt <- list(
+  human_multiome_motifsUp = motif_summary(motifsUp_homer.df),
+  mouse_multiome_motifsUp = ms_motifsUp_homer_pw.sig
+)
+motifsDown_lt <- list(
+  human_multiome_motifsUp = motif_summary(motifsDown_homer.df),
+  mouse_multiome_motifsUp = ms_motifsDown_homer_pw.sig
+)
+
+grid.newpage()
+pushViewport(viewport(width=unit(0.8, "npc"), height = unit(0.8, "npc")))
+venn.diagram(
+  motifsUp_lt,
+  NULL,
+  fill = myColours[1:2],
+  cex = 2,
+  cat.cex = 0.6,
+  lty = "blank",
+  category.names = c(
+    "human_motifsUp",
+    "mouse_motifsUp"
+  ),
+  cat.default.pos = "outer",
+  main = "Human Multiome vs Mouse Multiome: PIMOup_vs_PIMOdown PIMO_up_status motifsUp",
+  sub = "Significant motifs padj <0.05"
+) %>%
+grid.draw()
+
+grid.newpage()
+pushViewport(viewport(width=unit(0.8, "npc"), height = unit(0.8, "npc")))
+venn.diagram(
+  motifsDown_lt,
+  NULL,
+  fill = myColours[1:2],
+  cex = 2,
+  cat.cex = 0.6,
+  lty = "blank",
+  category.names = c(
+    "human_motifsDown",
+    "mouse_motifsDown"
+  ),
+  cat.default.pos = "outer",
+  main = "Human Multiome vs Mouse Multiome: PIMOup_vs_PIMOdown PIMO_up_status motifsDown",
+  sub = "Significant motifs padj <0.05"
+) %>%
+grid.draw()
+  
+
+```
+### extract overlaps
+```{r extract overlaps}
+
+calculate.overlap(motifsUp_lt) %>%
+print()
+
+calculate.overlap(motifsDown_lt) %>%
+print()
+```
+
+## Export to PDF
+```{r export to pdf}
+pdf(here("Plots","2026-01-19_human_multiome_PIMOup_vs_PIMOdown_motifs_vs_mouse_multiome_homer_motif_ranking.pdf"))
+motifsUp_homer.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = ms_motifsUp_homer_pw.sig) +
+    ggtitle("Human Multiome: Motifs Up (PIMOup vs PIMOdown) in common with Mouse Multiome", 
+          subtitle = "Top 25 Significantly enriched motifs"
+          )
+
+motifsDown_homer.df %>%
+  homer_motif_cleaning() %>%
+  plotMotifEnrichments_final(common_tfs_vector = ms_motifsDown_homer_pw.sig) +
+  ggtitle("Human Multiome: Motifs Down (PIMOup vs PIMOdown) in common with Mouse Multiome", 
+          subtitle = "Top 25 Significantly enriched motifs"
+          )
+dev.off()
+
+
+# venn 
+pdf(here("Plots","2026-01-19_human_multiome_PIMOup_vs_PIMOdown_motifs_vs_mouse_multiome_homer_venn.pdf"))
+grid.newpage()
+pushViewport(viewport(width=unit(0.8, "npc"), height = unit(0.8, "npc")))
+venn.diagram(
+  motifsUp_lt,
+  NULL,
+  fill = myColours[1:2],
+  cex = 2,
+  cat.cex = 0.6,
+  lty = "blank",
+  category.names = c(
+    "human_motifsUp",
+    "mouse_motifsUp"
+  ),
+  cat.default.pos = "outer",
+  main = "Human Multiome vs Mouse Multiome: PIMOup_vs_PIMOdown PIMO_up_status motifsUp",
+  sub = "Significant motifs padj <0.05"
+) %>%
+grid.draw()
+
+grid.newpage()
+pushViewport(viewport(width=unit(0.8, "npc"), height = unit(0.8, "npc")))
+venn.diagram(
+  motifsDown_lt,
+  NULL,
+  fill = myColours[1:2],
+  cex = 2,
+  cat.cex = 0.6,
+  lty = "blank",
+  category.names = c(
+    "human_motifsDown",
+    "mouse_motifsDown"
+  ),
+  cat.default.pos = "outer",
+  main = "Human Multiome vs Mouse Multiome: PIMOup_vs_PIMOdown PIMO_up_status motifsDown",
+  sub = "Significant motifs padj <0.05"
+) %>%
+grid.draw()
+dev.off()
+```
+
 
 
 # check h5 file integrity
