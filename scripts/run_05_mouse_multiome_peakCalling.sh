@@ -60,7 +60,8 @@ if (exists("findMacs2")) {
 
 # Set of ArchR object metadata columns to iterate over for peak calling
 # groupBy_list <- c("PIMO_pos", "hybrid_pair")
-groupBy_list <- c("PIMO_up_status", "hybrid_pair", "neftel_4_state")
+# groupBy_list <- c("PIMO_up_status", "hybrid_pair", "neftel_4_state")
+groupBy_list <- c("PIMO_up_status")
 print(paste("GroupBy list:", paste(groupBy_list, collapse = ", ")))
 
 for (groupBy in groupBy_list) {
@@ -143,6 +144,17 @@ saveRDS(markersPeaks_GR, file = paste0("mouse_multiome_harmony_merged_malig_peak
 
 }
 # pairwise test between PIMO_up_status groups: PIMOup vs PIMOdown:
+
+# First, load the appropriate peakset based on groupBy
+print("Loading PeakSet for PIMO_up_status for pairwise test")
+proj_hyp2 <- addPeakSet(
+  ArchRProj = proj_hyp2,
+  peakSet = readRDS("mouse_multiome_harmony_merged_malig_peak_subset/PeakCalls/PeakSet_gr_PIMO_up_status.rds"),
+  force = TRUE
+)
+print("PeakMatrix dimensions after adding PeakSet for PIMO_up_status:")
+peakMat <- getMatrixFromProject(ArchRProj = proj_hyp2, useMatrix = "PeakMatrix")
+print(dim(assay(peakMat)))
 
 # Check if PIMO_up_status exists in groupBy_list
 if("PIMO_up_status" %in% groupBy_list) {
