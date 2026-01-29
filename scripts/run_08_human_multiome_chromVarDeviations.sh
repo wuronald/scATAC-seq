@@ -14,11 +14,12 @@
 # Second argument: groupBy variable (e.g., "PIMO_up_status", "hybrid_pair")
 # Third argument (optional): comma-separated motifs of interest (e.g., "SOX,HIF,ARNT,NF1,NFI")
 # Example usage:
+# sbatch scripts/run_08_human_multiome_chromVarDeviations.sh homer PIMO_up_status
 # sbatch scripts/run_08_human_multiome_chromVarDeviations.sh cisbp hybrid_pair "SOX,HIF,ARNT,NF1,NFI"
 
 MOTIF_SET="${1:-homer}"  # Default to "homer" if no argument provided
 GROUP_BY="${2:-PIMO_up_status}"  # Default to "PIMO_up_status" if no argument provided
-MOTIFS_OF_INTEREST="${3:-HIF,ATF,FOS,JUN,AP-1,AP1,Bach}"  # Default motifs if not provided
+MOTIFS_OF_INTEREST="${3:-HIF,ATF,FOS,FRA,JUN,AP-1,AP1,Bach,NRF,MAF,RFX,NF,SOX,OLIG,Neuro,ASCL}"  # Default motifs if not provided
 
 # Export the parameters so R can access them
 export MOTIF_SET
@@ -44,8 +45,8 @@ library(ggplot2)
 set.seed(1)
 
 # Get parameters from environment variables
-motifSet <- Sys.getenv("MOTIF_SET", unset = "cisbp")
-groupBy <- Sys.getenv("GROUP_BY", unset = "hybrid_pair")
+motifSet <- Sys.getenv("MOTIF_SET", unset = "homer")
+groupBy <- Sys.getenv("GROUP_BY", unset = "PIMO_up_status")
 motifsOfInterest <- Sys.getenv("MOTIFS_OF_INTEREST", unset = "SOX,HIF,ARNT,NF1,NFI")
 
 # Convert comma-separated string to vector
@@ -172,8 +173,11 @@ if (length(markerMotifs) == 0) {
 } else {
     # Plot motif deviations by group
     print("Plotting motif deviations by group")
+    # set custom discrete color palette
+    PIMO_up_status_colors <- c("PIMOdown" = "blue", "PIMOinter" = "gold", "PIMOup" = "red")
     p <- plotGroups(
-        ArchRProj = proj, 
+        ArchRProj = proj,
+        pal = if (groupBy == "PIMO_up_status") PIMO_up_status_colors else NULL,
         groupBy = groupBy, 
         colorBy = deviationsMatrixName, 
         name = markerMotifs,
@@ -332,9 +336,13 @@ colorBy = "GeneExpressionMatrix",
 name = "VEGFA", 
 embedding = "UMAP_Harmony_LSI_Combined")
 
+# set custom discrete color palette
+PIMO_up_status_colors <- c("PIMOdown" = "blue", "PIMOinter" = "gold", "PIMOup" = "red")
+
 g2 <- plotEmbedding(proj, 
 colorBy = "cellColData", 
-name = "PIMO_up_status", 
+name = "PIMO_up_status",
+pal = PIMO_up_status_colors, 
 embedding = "UMAP_Harmony_LSI_Combined")
 
 g3 <- plotEmbedding(proj, 

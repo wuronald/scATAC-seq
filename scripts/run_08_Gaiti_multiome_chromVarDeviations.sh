@@ -88,6 +88,11 @@ if (file.exists(peakSetPath)) {
         force = TRUE
     )
     print("PeakSet added to ArchR project")
+     # Add peak matrix
+    print("adding peak matrix")
+    proj <- addPeakMatrix(proj, force = TRUE)
+    print("Peak matrix added to ArchR project")
+    
 } else {
     stop(paste("PeakSet file not found:", peakSetPath))
 }
@@ -333,9 +338,13 @@ colorBy = "GeneExpressionMatrix",
 name = "VEGFA", 
 embedding = "UMAP_Harmony_LSI_Combined")
 
+# set custom discrete color palette
+PIMO_up_status_colors <- c("PIMOdown" = "blue", "PIMOinter" = "gold", "PIMOup" = "red")
+
 g2 <- plotEmbedding(proj, 
 colorBy = "cellColData", 
-name = "PIMO_up_status", 
+name = "PIMO_up_status",
+pal = PIMO_up_status_colors, 
 embedding = "UMAP_Harmony_LSI_Combined")
 
 g3 <- plotEmbedding(proj, 
