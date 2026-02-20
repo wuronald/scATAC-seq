@@ -36,6 +36,7 @@ rsconnect/
 # raw data folder
 data/
 results/
+Plots/
 2024-01-30_Mathur.RData
 # log files
 ArchRLogs/

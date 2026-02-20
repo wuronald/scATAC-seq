@@ -12,9 +12,12 @@
 # Parse command line arguments
 # First argument: GENES Default genes for plotting browser tracks
 # Example usage:
-# sbatch scripts/run_06_human_multiome_markerHeatmap.sh "HIF,ATF,FOS,JUN,AP-1,AP1,Bach"
+# sbatch scripts/run_06_human_multiome_markerHeatmap.sh "HIF1A,CA9,VEGFA,SLC2A1"
 
-GENES="${1:-CTSB,OLIG1,OLIG2,SOX2,CD109,CD44,RND3,STMN2,NGFR,SOX10,ID1,ID2,ID3,CA9,VEGFA,SLC2A1}"  # Default genes for plotting browser tracks
+GENES="${4:-CTSB,OLIG1,OLIG2,SOX2,CD109,CD44,RND3,STMN2,NGFR,SOX10,ID1,ID2,ID3,CA9,VEGFA,SLC2A1,\
+EMX2,HES1,NR4A2,NR4A3,KLF9,NRN1,DNER,DPYSL4,RND3,CADM3,PLPPR3,SLC2A3,SLC5A3,PCP4,SOX12,\
+SV2A,VAMP1,PTPRN,PPFIA3,PPP1R1A,HOMER2,NMB,ADM,ENO2,CA11,HMOX1,CRYAB,TIPARP,SOD2,XBP1,\
+ATF3,DDIT4,DDIT4L}" # Default list of genes for browser track plotting; can be overridden by command line argument
 
 # Export the parameters so R can access them
 export GENES # make GENES available to R script
@@ -145,10 +148,15 @@ print("Plotting marker peaks in browser tracks for genes of interest")
 # genes <- c("CTSB","OLIG1", "OLIG2","SOX2", "CD109", "CD44", "RND3", "STMN2", "NGFR", "SOX10","ID2", "ID3", "CA9", "VEGFA", "SLC2A1") 
 print(paste("Genes of interest:", paste(genes, collapse = ", ")))
 
+# set custom discrete color palette
+PIMO_up_status_colors <- c("PIMOdown" = "blue", "PIMOinter" = "gold", "PIMOup" = "red")
+groupBy = "PIMO_up_status"
+
 p <- plotBrowserTrack(
     ArchRProj = proj_hyp, 
     groupBy = "PIMO_up_status", 
     geneSymbol = genes,
+    pal = if (groupBy == "PIMO_up_status") PIMO_up_status_colors else NULL,
     features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
     upstream = 50000,
     downstream = 50000
@@ -168,6 +176,7 @@ plotPDF(plotList = p,
 #     ArchRProj = proj_hyp, 
 #     groupBy = "PIMO_up_status", 
 #     geneSymbol = gene,
+#     pal = if (groupBy == "PIMO_up_status") PIMO_up_status_colors else NULL,
 #     features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
 #     upstream = 50000,
 #     downstream = 50000
