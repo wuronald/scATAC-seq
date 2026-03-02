@@ -10,25 +10,61 @@
 #SBATCH --time=01:00:00
 
 # Parse command line arguments
-# First argument: groupBy variable (e.g., "PIMO_up_status", "hybrid_pair")
+# First argument: groupBy variable (e.g., "PIMO_up_status", "hybrid_pair", "k3_program")
 # Second argument: path to directory containing BED files
 # Third argument (optional): pattern to match BED files (e.g., "PIMO_MP", "Nomura_")
 # Fourth argument (optional): "force" to re-export bigWig files even if they exist
+# Fifth argument (optional): path to a metadata CSV to add to the ArchR object before export.
+#                            The CSV must contain a "cell_id" column matching ArchR cell names.
+#                            When provided, the ArchR object is subset to cells present in the
+#                            CSV that have a non-NA cNMF_program. The cNMF_program column is
+#                            renamed to match the groupBy argument (e.g. "k3_program", "k9_program"),
+#                            so the first argument should reflect the K value of the CSV supplied.
 
 # Example usage:
 # sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh PIMO_up_status data/Signatures/PIMO_metaprogram/ PIMO_MP
 # sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh PIMO_up_status data/Signatures/nomura Nomura_
+# sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh k3_program data/Signatures/PIMO_metaprogram PIMO_MP no data/metadata/human_multiome/cNMF_cell_program_assignment_with_usages_K3.csv
+# sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh k9_program data/Signatures/cNMF cNMF_ no data/metadata/human_multiome/cNMF_cell_program_assignment_with_usages_K9.csv
 
 GROUP_BY="${1:-PIMO_up_status}"  # Default to "PIMO_up_status" if no argument provided
 BED_DIR="${2:-data/Signatures}"  # Default BED directory
 BED_PATTERN="${3:-PIMO_MP}"  # Default to PIMO Metaprograms
 FORCE_EXPORT="${4:-no}"  # Default to not forcing re-export
+METADATA_CSV="${5:-}"  # Optional path to metadata CSV (e.g. cNMF program assignments)
+
+# If a metadata CSV is provided but no groupBy was given, warn and exit — the user must
+# specify the groupBy (e.g. k3_program, k9_program) to match the CSV they are supplying.
+if [ -n "${METADATA_CSV}" ] && [ -z "${1}" ]; then
+    echo "ERROR: When providing a metadata CSV (arg 5), you must also specify a groupBy"
+    echo "       value as the first argument (e.g. k3_program, k9_program)."
+    echo "       This should match the K value of the cNMF solution in the CSV."
+    exit 1
+fi
+
+# Base ArchR project directory (original, never overwritten)
+BASE_ARCHR_PROJECT="human_multiome_harmony_merged_malig_peak"
+
+# If a metadata CSV is provided, the ArchR project will be subset into a new directory
+# named with a suffix derived from the groupBy argument (e.g. "_k3_program", "_k9_program").
+# All downstream outputs (bigwig_dir.txt, deeptools) use this same directory so
+# Part 1 and Part 2 always refer to the same location.
+if [ -n "${METADATA_CSV}" ]; then
+    # test if naming issue
+    RENAMED_ARCHR_PROJECT="human_multiome_hmmp"
+    ARCHR_PROJECT_DIR="${RENAMED_ARCHR_PROJECT}_${GROUP_BY}"
+else
+    ARCHR_PROJECT_DIR="${BASE_ARCHR_PROJECT}"
+fi
 
 # Export the parameters so R can access them
 export GROUP_BY
 export BED_DIR
 export BED_PATTERN
 export FORCE_EXPORT
+export METADATA_CSV
+export BASE_ARCHR_PROJECT
+export ARCHR_PROJECT_DIR
 
 echo "=========================================="
 echo "Running pseudo-bulk bigWig export and heatmap generation"
@@ -37,6 +73,9 @@ echo "  groupBy: ${GROUP_BY}"
 echo "  BED directory: ${BED_DIR}"
 echo "  BED file pattern: ${BED_PATTERN}"
 echo "  Force re-export: ${FORCE_EXPORT}"
+echo "  Metadata CSV: ${METADATA_CSV:-<none>}"
+echo "  Base ArchR project: ${BASE_ARCHR_PROJECT}"
+echo "  Working ArchR project: ${ARCHR_PROJECT_DIR}"
 echo "=========================================="
 echo ""
 
@@ -60,11 +99,15 @@ library(here)
 set.seed(1)
 
 # Get parameters from environment variables
-groupBy <- Sys.getenv("GROUP_BY", unset = "PIMO_up_status")
-forceExport <- Sys.getenv("FORCE_EXPORT", unset = "no")
+groupBy          <- Sys.getenv("GROUP_BY",           unset = "PIMO_up_status")
+forceExport      <- Sys.getenv("FORCE_EXPORT",       unset = "no")
+baseArchRProject <- Sys.getenv("BASE_ARCHR_PROJECT", unset = "human_multiome_harmony_merged_malig_peak")
+archrProjectDir  <- Sys.getenv("ARCHR_PROJECT_DIR",  unset = "human_multiome_harmony_merged_malig_peak")
 
 cat("Using groupBy:", groupBy, "\n")
 cat("Force re-export:", forceExport, "\n")
+cat("Base ArchR project:", baseArchRProject, "\n")
+cat("Working ArchR project:", archrProjectDir, "\n")
 
 # Set the number of threads for ArchR
 addArchRThreads(threads = 18)
@@ -72,13 +115,145 @@ addArchRThreads(threads = 18)
 # Set genome to hg38
 addArchRGenome("hg38")
 
-# Load the ArchR project
+# Load the original (unmodified) ArchR project
 cat("Loading ArchR project...\n")
-proj <- loadArchRProject(path = "human_multiome_harmony_merged_malig_peak")
+proj <- loadArchRProject(path = baseArchRProject)
 
-# Create output directory for bigWig files
+print("InitiaL SAVE before subsetting...")
+saveArchRProject(proj, outputDirectory = archrProjectDir, load = FALSE)  # save before subsetting
+print("InitiaL load before subsetting...")
+proj <- loadArchRProject(path = archrProjectDir)
+print("Passed load before subsetting...")
+
+########################################################
+# Optional: Add external metadata and subset cells
+########################################################
+
+metadataCsv <- Sys.getenv("METADATA_CSV", unset = "")
+
+if (nchar(metadataCsv) > 0) {
+  cat("\n========================================\n")
+  cat("Adding external metadata from CSV\n")
+  cat("========================================\n")
+  cat("CSV path:", metadataCsv, "\n")
+  
+  if (!file.exists(metadataCsv)) {
+    stop(paste("Metadata CSV not found:", metadataCsv))
+  }
+  
+  # Read the metadata CSV
+  meta <- read.csv(metadataCsv, stringsAsFactors = FALSE)
+  cat(sprintf("Loaded metadata: %d rows, %d columns\n", nrow(meta), ncol(meta)))
+  cat("Columns:", paste(colnames(meta), collapse = ", "), "\n")
+  
+  if (!"cell_id" %in% colnames(meta)) {
+    stop("Metadata CSV must contain a 'cell_id' column matching ArchR cell names.")
+  }
+  
+  # Reformat cell_id from CSV format to ArchR format:
+  # CSV:   "Zadeh__C0736__5117____BARCODE-1"  (separator = ____)
+  # ArchR: "Zadeh__C0736__5117#BARCODE-1"     (separator = #)
+  meta$cell_id <- sub("____", "#", meta$cell_id)
+  cat("Reformatted cell_id: replaced '____' separator with '#' to match ArchR cell names\n")
+  cat("Example reformatted cell_id:", head(meta$cell_id, 1), "\n")
+  
+  # Rename cNMF_program -> groupBy column name (e.g. k3_program, k9_program).
+  # This makes the column name reflect the K value used, and keeps it ArchR-safe.
+  # Values are prefixed with "program_" to avoid purely numeric group names in ArchR.
+  if ("cNMF_program" %in% colnames(meta)) {
+    meta[[groupBy]] <- paste0("program_", meta$cNMF_program)  # e.g. "program_1" ... "program_K"
+    cat(sprintf("Renamed 'cNMF_program' -> '%s' (values prefixed with 'program_')\n", groupBy))
+  }
+  
+  # Match metadata to ArchR cells
+  archrCells <- rownames(proj@cellColData)
+  matchIdx   <- match(archrCells, meta$cell_id)
+  
+  nMatched <- sum(!is.na(matchIdx))
+  cat(sprintf("Matched %d / %d ArchR cells to metadata\n", nMatched, length(archrCells)))
+  
+  # Add all metadata columns (except cell_id) to the ArchR project (moved)
+    colsToAdd <- setdiff(colnames(meta), "cell_id")
+      # Add all metadata columns (except cell_id) to the ArchR project
+
+  for (col in colsToAdd) {
+    values <- meta[[col]][matchIdx]
+    # Convert to named vector; ArchR expects a DataFrame-compatible type
+    proj <- addCellColData(
+      ArchRProj = proj,
+      data      = values,
+      name      = col,
+      cells     = archrCells,
+      force     = TRUE
+    )
+    cat(sprintf("  ✓ Added column '%s'\n", col))
+  }
+
+  # Subset to cells that have a non-NA cNMF program assignment.
+  # Uses groupBy (e.g. "k3_program", "k9_program") as the column name — set dynamically above.
+  if (groupBy %in% colsToAdd) {
+    cellsBefore <- nCells(proj)
+    cellsWithProgram <- archrCells[!is.na(meta[[groupBy]][matchIdx])]
+    print(paste("Number of cells with program:", length(cellsWithProgram)))
+    print(head(cellsWithProgram))
+    cells = getCellNames(proj)
+    print("Example ArchR cell names:")
+    print(head(cells))
+
+    if (length(cellsWithProgram) == 0) {
+      stop(sprintf(
+        "No cells with a non-NA '%s' found after metadata join. Check that cell_id values match ArchR cell names.",
+        groupBy
+      ))
+    }
+    
+    # subsetArchRProject() writes the new project to disk but its internal
+    # loadArchRProject() call can fail before Arrow files are fully flushed
+    # (known ArchR bug). We suppress the return value and reload manually instead.
+    tryCatch({
+      proj <- subsetArchRProject(
+        ArchRProj       = proj,
+        cells           = cellsWithProgram,
+        dropCells       = TRUE,
+        outputDirectory = archrProjectDir,  # separate dir, preserves original project
+        force           = TRUE
+      )
+    }, error = function(e) {
+      # The subset + save succeeded if the Arrow files exist on disk; the error
+      # is only thrown by the internal reload that follows. Check for that and
+      # continue — otherwise re-raise the error.
+      arrowFiles <- list.files(file.path(archrProjectDir, "ArrowFiles"), pattern = "\\.arrow$")
+      if (length(arrowFiles) == 0) {
+        stop(sprintf("subsetArchRProject failed and no Arrow files found in %s/ArrowFiles: %s",
+                     archrProjectDir, e$message))
+      }
+      cat(sprintf("⚠ Caught expected ArchR reload bug after subsetting (Arrow files present on disk). Reloading manually.\n"))
+    })
+    
+    cat(sprintf("\n✓ Subsetted ArchR project: %d → %d cells (kept cells with non-NA %s)\n",
+                cellsBefore, nCells(proj), groupBy))
+
+    # Reload the subset project from disk now that files are fully written
+    Sys.sleep(2)  # brief pause to ensure filesystem sync
+    print("Reloading subsetted ArchR project from disk after pause...")
+    proj <- loadArchRProject(path = archrProjectDir)
+       
+    # Summary of program assignments
+    progTable <- table(proj@cellColData[[groupBy]])
+    cat(sprintf("\n%s distribution after subsetting:\n", groupBy))
+    for (prog in names(progTable)) {
+      cat(sprintf("  %s: %d cells\n", prog, progTable[[prog]]))
+    }
+  }
+  
+  cat("========================================\n\n")
+} else {
+  cat("No metadata CSV provided. Skipping metadata addition and cell subsetting.\n\n")
+}
+
+# Create output directory for bigWig files (inside the working project dir, not the base)
 filePrefix <- gsub("_", "", groupBy)
-outDir <- here(paste0("human_multiome_harmony_merged_malig_peak/pseudobulk_bigwig_", groupBy, "/"))
+outDir <- here(paste0(archrProjectDir, "/pseudobulk_bigwig_", groupBy, "/"))
 dir.create(outDir, showWarnings = FALSE, recursive = TRUE)
 
 cat("Output directory:", outDir, "\n")
@@ -222,7 +397,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 echo "Timestamp: ${TIMESTAMP}"
 
 # Read the bigwig directory path
-BIGWIG_DIR=$(cat human_multiome_harmony_merged_malig_peak/pseudobulk_bigwig_${GROUP_BY}/bigwig_dir.txt)
+BIGWIG_DIR=$(cat ${ARCHR_PROJECT_DIR}/pseudobulk_bigwig_${GROUP_BY}/bigwig_dir.txt)
 
 echo "BigWig directory: ${BIGWIG_DIR}"
 echo "BED directory: ${BED_DIR}"
@@ -266,7 +441,7 @@ echo "${BED_FILES}"
 echo ""
 
 # Create output directory for deeptools results
-DEEPTOOLS_OUT="human_multiome_harmony_merged_malig_peak/deeptools_${GROUP_BY}_${BED_PATTERN}"
+DEEPTOOLS_OUT="${ARCHR_PROJECT_DIR}/deeptools_${GROUP_BY}_${BED_PATTERN}"
 mkdir -p ${DEEPTOOLS_OUT}
 
 echo "Output directory: ${DEEPTOOLS_OUT}"
