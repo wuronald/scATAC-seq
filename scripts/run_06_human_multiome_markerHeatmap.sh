@@ -9,180 +9,248 @@
 #SBATCH --mem=16G
 #SBATCH --time=00:30:00
 
+# =============================================================================
 # Parse command line arguments
-# First argument: GENES Default genes for plotting browser tracks
-# Example usage:
-# sbatch scripts/run_06_human_multiome_markerHeatmap.sh "HIF1A,CA9,VEGFA,SLC2A1"
+# Usage:
+#   sbatch scripts/run_06_human_multiome_markerHeatmap.sh \
+#       [ARCHR_PATH] [GROUP_BY] [GENES] [PAIRWISE]
+#
+# Arguments (all optional, positional):
+#   $1  ARCHR_PATH  Path to the ArchRProject directory
+#                   Default: human_multiome_harmony_merged_malig_peak
+#
+#   $2  GROUP_BY    Metadata column to group cells by for marker analysis
+#                   Default: PIMO_up_status
+#
+#   $3  GENES       Comma-separated gene symbols for browser tracks
+#                   Default: CTSB,OLIG1,OLIG2,... (see below)
+#
+#   $4  PAIRWISE    Whether to load a pairwise markersTest RDS (true/false)
+#                   Default: true when GROUP_BY=PIMO_up_status, false otherwise
+#                   true  → loads markersTest_{GROUP_BY}_PIMOup_vs_PIMOdown.rds
+#                   false → loads markersPeaks_{GROUP_BY}.rds
+#
+# Examples:
+#   # Run with all defaults (PIMO_up_status, pairwise=true):
+#   sbatch scripts/run_06_human_multiome_markerHeatmap.sh
+#
+#   # Custom project + groupBy, pairwise auto-defaults to false:
+#   sbatch scripts/run_06_human_multiome_markerHeatmap.sh \
+#       "human_multiome_hmmp_k3_program" "k3_program"
+#
+#   # Force pairwise off for PIMO_up_status:
+#   sbatch scripts/run_06_human_multiome_markerHeatmap.sh \
+#       "human_multiome_harmony_merged_malig_peak" "PIMO_up_status" "" "false"
+#
+#   # All arguments specified:
+#   sbatch scripts/run_06_human_multiome_markerHeatmap.sh \
+#       "human_multiome_hmmp_k3_program" "k3_program" "VOPP1,LANCL2,EGFR,NEAT1,ZBTB20,MT2A,ERRFI1,DST,GAPDH,CD63,ACTB,FTL" "false"
+# =============================================================================
 
-GENES="${4:-CTSB,OLIG1,OLIG2,SOX2,CD109,CD44,RND3,STMN2,NGFR,SOX10,ID1,ID2,ID3,CA9,VEGFA,SLC2A1,\
+DEFAULT_GENES="CTSB,OLIG1,OLIG2,SOX2,CD109,CD44,RND3,STMN2,NGFR,SOX10,ID1,ID2,ID3,CA9,VEGFA,SLC2A1,\
 EMX2,HES1,NR4A2,NR4A3,KLF9,NRN1,DNER,DPYSL4,RND3,CADM3,PLPPR3,SLC2A3,SLC5A3,PCP4,SOX12,\
 SV2A,VAMP1,PTPRN,PPFIA3,PPP1R1A,HOMER2,NMB,ADM,ENO2,CA11,HMOX1,CRYAB,TIPARP,SOD2,XBP1,\
-ATF3,DDIT4,DDIT4L}" # Default list of genes for browser track plotting; can be overridden by command line argument
+ATF3,DDIT4,DDIT4L"
 
-# Export the parameters so R can access them
-export GENES # make GENES available to R script
+ARCHR_PATH="${1:-human_multiome_harmony_merged_malig_peak}"
+GROUP_BY="${2:-PIMO_up_status}"
+GENES="${3:-${DEFAULT_GENES}}"
 
-echo "Running markerheatamp analysis with:"
-echo "  genes: ${GENES}"
+# PAIRWISE: default true only when GROUP_BY is PIMO_up_status
+if [ -n "$4" ]; then
+    PAIRWISE="$4"
+elif [ "${GROUP_BY}" = "PIMO_up_status" ]; then
+    PAIRWISE="true"
+else
+    PAIRWISE="false"
+fi
 
-# Load necessary modules (adjust as needed for your system)
+# Validate that the ArchRProject directory exists before launching R
+if [ ! -d "${ARCHR_PATH}" ]; then
+    echo "ERROR: ArchRProject directory not found: ${ARCHR_PATH}"
+    exit 1
+fi
+
+# Validate PAIRWISE value
+if [ "${PAIRWISE}" != "true" ] && [ "${PAIRWISE}" != "false" ]; then
+    echo "ERROR: PAIRWISE must be 'true' or 'false', got: ${PAIRWISE}"
+    exit 1
+fi
+
+# Export parameters so the R heredoc can read them via Sys.getenv()
+export ARCHR_PATH
+export GROUP_BY
+export GENES
+export PAIRWISE
+
+echo "============================================="
+echo "Running markerHeatmap analysis with:"
+echo "  ArchRProject path : ${ARCHR_PATH}"
+echo "  Group-by variable : ${GROUP_BY}"
+echo "  Pairwise mode     : ${PAIRWISE}"
+echo "  Genes             : ${GENES}"
+echo "============================================="
+
 module load R/4.4.1
 
-# Run R script
 Rscript - <<'EOF'
 
-# load libraries
 library(ArchR)
 library(BSgenome.Hsapiens.UCSC.hg38)
 library(here)
 set.seed(1)
 
-# Get parameters from environment variables
+# ── Read parameters from environment ──────────────────────────────────────────
+archr_path <- Sys.getenv("ARCHR_PATH",
+    unset = "human_multiome_harmony_merged_malig_peak")
+group_by   <- Sys.getenv("GROUP_BY",
+    unset = "PIMO_up_status")
+pairwise   <- tolower(Sys.getenv("PAIRWISE", unset = "false")) == "true"
+genes_raw  <- Sys.getenv("GENES",
+    unset = "CTSB,OLIG1,OLIG2,SOX2,CD109,CD44,RND3,STMN2,NGFR,SOX10,ID1,ID2,ID3,CA9,VEGFA,SLC2A1")
 
-genes <- Sys.getenv("GENES", unset = "CTSB,OLIG1,OLIG2,SOX2,CD109,CD44,RND3,STMN2,NGFR,SOX10,ID1,ID2,ID3,CA9,VEGFA,SLC2A1")
-# Convert comma-separated string to vector
-genes <- unlist(strsplit(genes, ","))
+genes <- unlist(strsplit(genes_raw, ","))
 
-# Set the number of threads for ArchR
+# ── Derived file paths ────────────────────────────────────────────────────────
+peak_calls_dir <- file.path(archr_path, "PeakCalls")
+
+# markersPeaks RDS: pairwise test file vs. standard markers file
+if (pairwise) {
+    markersPeaks_rds <- file.path(peak_calls_dir,
+        paste0("markersTest_", group_by, "_PIMOup_vs_PIMOdown.rds"))
+} else {
+    markersPeaks_rds <- file.path(peak_calls_dir,
+        paste0("markersPeaks_", group_by, ".rds"))
+}
+
+markersPeaks_GR_rds <- file.path(peak_calls_dir,
+    paste0("markersPeaks_GR_", group_by, ".rds"))
+
+cat("Resolved parameters:\n")
+cat("  ArchRProject    :", archr_path, "\n")
+cat("  PeakCalls dir   :", peak_calls_dir, "\n")
+cat("  Pairwise mode   :", pairwise, "\n")
+cat("  markersPeaks RDS:", markersPeaks_rds, "\n")
+cat("  markersPeaks GR :", markersPeaks_GR_rds, "\n")
+cat("  group_by        :", group_by, "\n")
+cat("  genes           :", paste(genes, collapse = ", "), "\n\n")
+
+# ── ArchR setup ───────────────────────────────────────────────────────────────
 addArchRThreads(threads = 18)
-
-# set genome to hg38
 addArchRGenome("hg38")
 
-# Load the project
-proj_hyp <- loadArchRProject(path = "human_multiome_harmony_merged_malig_peak")
+# ── Load ArchRProject ─────────────────────────────────────────────────────────
+if (!dir.exists(archr_path)) stop("ArchRProject directory not found: ", archr_path)
+proj_hyp <- loadArchRProject(path = archr_path)
 
-# path to saved markersPeaks RDS file
-#markersPeaks_rds <- "human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_PIMO_up_status.rds"
-markersPeaks_rds <- "human_multiome_harmony_merged_malig_peak/PeakCalls/markersTest_PIMO_up_status_PIMOup_vs_PIMOdown.rds"
-
+# ── Load or compute markersPeaks ──────────────────────────────────────────────
 if (!exists("markersPeaks")) {
-    print("loading markersPeaks")
+    print("Loading markersPeaks ...")
     if (file.exists(markersPeaks_rds)) {
-        print("previously saved markersPeaks loaded")
+        print(paste("Previously saved markersPeaks found; loading from:", markersPeaks_rds))
         markersPeaks <- readRDS(file = markersPeaks_rds)
     } else {
-        print("extracting markersPeaks")
+        print(paste("No saved RDS at:", markersPeaks_rds, "- computing now."))
+        print(paste("Running getMarkerFeatures() with groupBy =", group_by))
         markersPeaks <- getMarkerFeatures(
-            ArchRProj = proj_hyp,
-            useMatrix = "PeakMatrix",
-            groupBy = "PIMO_up_status",
-            bias = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
+            ArchRProj  = proj_hyp,
+            useMatrix  = "PeakMatrix",
+            groupBy    = group_by,
+            bias       = c("TSSEnrichment", "log10(nFrags)", "log10(Gex_nUMI)"),
             testMethod = "wilcoxon"
         )
+        dir.create(peak_calls_dir, showWarnings = FALSE, recursive = TRUE)
+        saveRDS(markersPeaks, file = markersPeaks_rds)
+        print(paste("Saved markersPeaks to:", markersPeaks_rds))
     }
 }
 
-# check if markersPeaks is a SummarizedExperiment object; needed for plotting
-print("Checking if markersPeaks is a SummarizedExperiment object")
+print("Checking if markersPeaks is a SummarizedExperiment object ...")
 if (!is(markersPeaks, "SummarizedExperiment")) {
-    stop("markersPeaks is not a SummarizedExperiment object. Please check your markersPeaks data.")
+    stop("markersPeaks is not a SummarizedExperiment object. Please check your data.")
 } else {
     print("markersPeaks is a valid SummarizedExperiment object.")
 }
 
-# Extract GR object from SE object for PIMO_up_status groups (used later for MA plots in rstudio)
-print("Extracting marker peaks GR object for PIMO_up_status groups")
-
-markersPeaks_GR_rds <- "human_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_GR_PIMO_up_status.rds"
+# ── Load or compute markersPeaks GR ──────────────────────────────────────────
+print(paste("Extracting marker peaks GR object for", group_by, "groups"))
 if (file.exists(markersPeaks_GR_rds)) {
-    print(paste("File already exists:", markersPeaks_GR_rds))
+    print(paste("Previously saved GR found; loading from:", markersPeaks_GR_rds))
     markersPeaks_GR <- readRDS(file = markersPeaks_GR_rds)
 } else {
-    markersPeaks_GR <- getMarkers(markersPeaks, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
+    print(paste("No saved GR RDS at:", markersPeaks_GR_rds, "- computing now."))
+    markersPeaks_GR <- getMarkers(markersPeaks,
+        cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
     saveRDS(markersPeaks_GR, file = markersPeaks_GR_rds)
     print(paste("Saved markersPeaks_GR to:", markersPeaks_GR_rds))
 }
 
 print(paste("Number of marker peaks identified:", sapply(markersPeaks_GR, length)))
 
-
-# Plot marker heatmap for Azimuth_class
-print("Plotting marker heatmap for PIMO_up_status groups")
+# ── Marker heatmap ────────────────────────────────────────────────────────────
+print(paste("Plotting marker heatmap for", group_by, "groups"))
 cutOff <- "FDR <= 0.1 & abs(Log2FC) >= 0.5"
 print(paste("Using cutOff:", cutOff))
 
 heatmap <- plotMarkerHeatmap(
-    seMarker = markersPeaks,
-    cutOff = cutOff,
-    limits = c(-2, 2),
-    plotLog2FC = TRUE,
-    transpose = TRUE,
+    seMarker     = markersPeaks,
+    cutOff       = cutOff,
+    limits       = c(-2, 2),
+    plotLog2FC   = TRUE,
+    transpose    = TRUE,
     returnMatrix = FALSE
 )
-# Save the heatmap as a PDF
-print("Saving heatmap as PDF")
-plotPDF(heatmap, name = "markerPeaks-Heatmap", width = 8, height = 6, ArchRProj = proj_hyp, addDOC = TRUE)
+plotPDF(heatmap,
+    name      = paste0("markerPeaks-Heatmap_", group_by),
+    width     = 8,
+    height    = 6,
+    ArchRProj = proj_hyp,
+    addDOC    = TRUE)
 
-# Plot MA plots for marker peaks
-print("Plotting MA plots for marker peaks")
-
-# Iterate over each group in the markersPeaks object and create MA plots
+# ── MA & Volcano plots ────────────────────────────────────────────────────────
+print("Plotting MA and Volcano plots for marker peaks ...")
 for (group in colnames(markersPeaks)) {
-    print(paste("Creating MA plot for group:", group))
-    pma <- plotMarkers(
-        seMarker = markersPeaks,
-        name = group,
-        cutOff = cutOff,
-        plotAs = "MA"
-    )
-    print(paste("Creating Volcano plot for group:", group))
-    pvolcano <- plotMarkers(
-        seMarker = markersPeaks,
-        name = group,
-        cutOff = cutOff,
-        plotAs = "Volcano"
-    )
-    # Save each MA plot as a PDF
-    print(paste("Saving MA plot for group:", group))
-    plotPDF(pma, pvolcano, 
-    name = paste0("markerPeaks-MAplot_", group), width = 5, height = 5, ArchRProj = proj_hyp, addDOC = TRUE)
+    print(paste("Creating MA + Volcano plots for group:", group))
+    pma <- plotMarkers(seMarker = markersPeaks, name = group,
+        cutOff = cutOff, plotAs = "MA")
+    pvolcano <- plotMarkers(seMarker = markersPeaks, name = group,
+        cutOff = cutOff, plotAs = "Volcano")
+    plotPDF(pma, pvolcano,
+        name      = paste0("markerPeaks-MAplot_", group_by, "_", group),
+        width     = 5,
+        height    = 5,
+        ArchRProj = proj_hyp,
+        addDOC    = TRUE)
 }
 print("All MA and Volcano plots created and saved.")
 
-# get gene annotation for hg38
+# ── Browser tracks ────────────────────────────────────────────────────────────
 geneAnno <- getGeneAnnotation(proj_hyp)
 
-# Plot marker peaks in browser tracks for genes of interest:
-print("Plotting marker peaks in browser tracks for genes of interest")
-# genes <- c("CTSB","OLIG1", "OLIG2","SOX2", "CD109", "CD44", "RND3", "STMN2", "NGFR", "SOX10","ID2", "ID3", "CA9", "VEGFA", "SLC2A1") 
-print(paste("Genes of interest:", paste(genes, collapse = ", ")))
+print("Plotting browser tracks for genes of interest ...")
+print(paste("Genes:", paste(genes, collapse = ", ")))
 
-# set custom discrete color palette
+# PIMO_up_status-specific palette; NULL (ArchR default) for any other groupBy
 PIMO_up_status_colors <- c("PIMOdown" = "blue", "PIMOinter" = "gold", "PIMOup" = "red")
-groupBy = "PIMO_up_status"
+track_pal <- if (group_by == "PIMO_up_status") PIMO_up_status_colors else NULL
 
 p <- plotBrowserTrack(
-    ArchRProj = proj_hyp, 
-    groupBy = "PIMO_up_status", 
+    ArchRProj  = proj_hyp,
+    groupBy    = group_by,
     geneSymbol = genes,
-    pal = if (groupBy == "PIMO_up_status") PIMO_up_status_colors else NULL,
-    features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
-    upstream = 50000,
+    pal        = track_pal,
+    features   = getMarkers(markersPeaks,
+        cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
+    upstream   = 50000,
     downstream = 50000
 )
-plotPDF(plotList = p, 
-    name = paste0("markerPeaks_browserTrack-PIMO_up_status"), 
-    ArchRProj = proj_hyp, 
-    addDOC = TRUE, 
-    width = 5, 
-    height = 5
-    )
+plotPDF(plotList = p,
+    name      = paste0("markerPeaks_browserTrack-", group_by),
+    ArchRProj = proj_hyp,
+    addDOC    = TRUE,
+    width     = 5,
+    height    = 5)
 
-# for (gene in genes) {
-# print(paste("Plotting marker peaks in browser tracks for: ", gene))
-
-# p <- plotBrowserTrack(
-#     ArchRProj = proj_hyp, 
-#     groupBy = "PIMO_up_status", 
-#     geneSymbol = gene,
-#     pal = if (groupBy == "PIMO_up_status") PIMO_up_status_colors else NULL,
-#     features =  getMarkers(markersPeaks, cutOff = "FDR <= 0.1 & abs(Log2FC) >= 1", returnGR = TRUE),
-#     upstream = 50000,
-#     downstream = 50000
-# )
-
-# plotPDF(p, name = paste0("markerPeaks_browserTrack-PIMO_up_status_", gene), width = 5, height = 5, ArchRProj = proj_hyp, addDOC = TRUE)
-# }
+print("Done! All outputs saved.")
 
 EOF
