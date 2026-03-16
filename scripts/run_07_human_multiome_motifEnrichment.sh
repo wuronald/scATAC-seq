@@ -211,33 +211,76 @@ saveRDS(motifsDown, file = file.path(outDir, paste0("motifsDown_", filePrefix, "
 # Function: motif enrichment SE objects for plotting
 print("Plotting ggplot of motif enrichment results")
 
-plotMotifEnrichments <- function(motifs) {
-    # Convert to data frame for ggplot
-    df <- data.frame(TF = rownames(motifs), mlog10Padj = assay(motifs)[,1])
+# plotMotifEnrichments <- function(motifs) {
+#     # Convert to data frame for ggplot
+#     df <- data.frame(TF = rownames(motifs), mlog10Padj = assay(motifs)[,1])
+#     df <- df[order(df$mlog10Padj, decreasing = TRUE),]
+#     df$rank <- seq_len(nrow(df))
+
+#     gg <- ggplot(df, aes(rank, mlog10Padj, color = mlog10Padj)) +
+#       geom_point(size = 1) +
+#       ggrepel::geom_label_repel(
+#             data    = df[rev(seq_len(30)), ], aes(x = rank, y = mlog10Padj, label = TF),
+#             size    = 1.5,
+#             nudge_x = 150,
+#             force   = 5,
+#             direction = "both",
+#             hjust   = 0.5,
+#             color   = "black"
+#       ) + theme_ArchR() +
+#       ylab("-log10(P-adj) Motif Enrichment") +
+#       xlab("Rank Sorted TFs Enriched") +
+#       scale_colour_gradientn(colors = paletteContinuous(set = "comet"))
+#     return(gg)
+# }
+
+# ggUp   <- plotMotifEnrichments(motifsUp)
+# ggDown <- plotMotifEnrichments(motifsDown)
+
+# plotPDF(ggUp, ggDown, name = paste0(filePrefix, "-Markers-Motifs-Enriched_", motifSet), width = 5, height = 5, ArchRProj = proj, addDOC = TRUE)
+# Function: motif enrichment SE objects for plotting
+print("Plotting ggplot of motif enrichment results")
+
+plotMotifEnrichments <- function(motifs, groupName = NULL) {
+    df <- data.frame(TF = rownames(motifs), mlog10Padj = assay(motifs)[, groupName])
     df <- df[order(df$mlog10Padj, decreasing = TRUE),]
     df$rank <- seq_len(nrow(df))
+
+    title <- if (!is.null(groupName)) groupName else "Enrichment"
 
     gg <- ggplot(df, aes(rank, mlog10Padj, color = mlog10Padj)) +
       geom_point(size = 1) +
       ggrepel::geom_label_repel(
-            data    = df[rev(seq_len(30)), ], aes(x = rank, y = mlog10Padj, label = TF),
-            size    = 1.5,
+            data = df[rev(seq_len(30)), ], aes(x = rank, y = mlog10Padj, label = TF),
+            size = 1.5,
             nudge_x = 150,
-            force   = 5,
+            force = 5,
             direction = "both",
-            hjust   = 0.5,
-            color   = "black"
+            hjust = 0.5,
+            color = "black"
       ) + theme_ArchR() +
+      ggtitle(title) +
       ylab("-log10(P-adj) Motif Enrichment") +
       xlab("Rank Sorted TFs Enriched") +
       scale_colour_gradientn(colors = paletteContinuous(set = "comet"))
     return(gg)
 }
 
-ggUp   <- plotMotifEnrichments(motifsUp)
-ggDown <- plotMotifEnrichments(motifsDown)
+# Generate one plot per group for motifsUp and motifsDown
+groups <- colnames(assay(motifsUp))
+ggUp   <- lapply(groups, function(g) plotMotifEnrichments(motifsUp,   groupName = g))
+ggDown <- lapply(groups, function(g) plotMotifEnrichments(motifsDown, groupName = g))
 
-plotPDF(ggUp, ggDown, name = paste0(filePrefix, "-Markers-Motifs-Enriched_", motifSet), width = 5, height = 5, ArchRProj = proj, addDOC = TRUE)
+# Flatten into a single list: [up_prog1, up_prog2, ..., down_prog1, down_prog2, ...]
+allPlots <- c(ggUp, ggDown)
+
+do.call(plotPDF, c(allPlots, list(
+    name      = paste0(filePrefix, "-Markers-Motifs-Enriched_", motifSet),
+    width     = 5,
+    height    = 5,
+    ArchRProj = proj,
+    addDOC    = TRUE
+)))
 
 # Motif Enrichment heatmaps
 print("Plotting heatmap of motif enrichment results")
@@ -256,8 +299,24 @@ heatmapEM_down <- tryCatch(
     }
 )
 
+# Motif Enrichment heatmaps (relaxed thresholds)
+heatmapEM_up_relaxed <- tryCatch(
+    plotEnrichHeatmap(motifsUp,   n = 10, transpose = TRUE, cutOff = 5),
+    error = function(e) {
+        message("WARNING: plotEnrichHeatmap for motifsUp (relaxed) failed — skipping. Reason: ", conditionMessage(e))
+        NULL
+    }
+)
+heatmapEM_down_relaxed <- tryCatch(
+    plotEnrichHeatmap(motifsDown, n = 10, transpose = TRUE, cutOff = 5),
+    error = function(e) {
+        message("WARNING: plotEnrichHeatmap for motifsDown (relaxed) failed — skipping. Reason: ", conditionMessage(e))
+        NULL
+    }
+)
+
 # Only plot whichever heatmaps succeeded
-heatmapList <- Filter(Negate(is.null), list(heatmapEM_up, heatmapEM_down))
+heatmapList <- Filter(Negate(is.null), list(heatmapEM_up, heatmapEM_down, heatmapEM_up_relaxed, heatmapEM_down_relaxed))
 if (length(heatmapList) > 0) {
     do.call(plotPDF, c(heatmapList, list(
         name      = paste0(groupBy, "-_MotifsUp_MotifsDown-Enriched-Marker-Heatmap_", motifSet),
