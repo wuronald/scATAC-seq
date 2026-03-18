@@ -54,6 +54,13 @@ markersTest_gr <- readRDS(
        "PIMOup_vs_PIMOdown",
        "markersTest_GR_PIMO_up_status_PIMOup_vs_PIMOdown.rds")
 )
+
+# For k3_program (non-pairwise)
+markersPeak_k3_program <- readRDS(
+  here("data","human_multiome","human_multiome_hmmp_k3_program",
+       "PeakCalls",
+       "markersPeaks_k3_program.rds")
+)
 ```
 
 # Load motifEnrichment Results
@@ -122,6 +129,18 @@ chromVarDev_pos_TF_reg <- readRDS(
   )
 )
 ```
+## load scPOS-MP (k3 program) motifs
+```{r load scPos-MP k3 program motifs}
+
+k3_motifsUp <- readRDS(file = here("data", "human_multiome", "human_multiome_hmmp_k3_program",
+                                "motifEnrichment_homer_k3_program",
+                                "motifsUp_k3program_homer.rds"))
+
+k3_motifsDown <- readRDS(file = here("data", "human_multiome", "human_multiome_hmmp_k3_program",
+                                "motifEnrichment_homer_k3_program",
+                                "motifsDown_k3program_homer.rds"))
+```
+
 ## load custom enrichment with bulk ATAC in multiome
 Here we load the result of the custom enrichment analysis where peaks from bulk ATAC-seq were used to compare to multiome results. This was processed by `run_07b_human_multiome_CustomMotifEnrichment.sh`
 
@@ -175,7 +194,7 @@ sum(is.na(fdr)) # 761
 
 ArchR has a built in function to draw both volcano and MA plots, and we were interested in reproducing these plots in R from the SE object.
 
-Note, thenumber of features reported in the MA plot from ArchR, which is 167905, seems to be in conflict with the number of rows or features reported in the GRanges object downstream.
+Note, the number of features reported in the MA plot from ArchR, which is 167905, seems to be in conflict with the number of rows or features reported in the GRanges object downstream.
 
 We wondered if this is due to NAs in the data?
 We observed 761 NAs in FDR column total among all the groups within PIMO_up_status. Recall, we start with a total of 167905 features unfiltered.
@@ -243,14 +262,57 @@ To better understand motif enrichment results, we can plot the ranking of each m
 
 ```{r plotting function for motif enrichment rank vs Significance }
 # convert the SE to df for plotting and EDA
-motifSEtoDF <- function(motifs) {
+#motifSEtoDF <- function(motifs) {
   # Convert to data frame for ggplot
-  df <- data.frame(TF = rownames(motifs), mlog10Padj = assay(motifs)[, 1])
-  df <- df[order(df$mlog10Padj, decreasing = TRUE), ]
-  df$rank <- seq_len(nrow(df))
-  df$TF_fixed <- sub("_.*", "", df$TF) # remove the _number suffix
-df$TF_family <- sub(".*\\.", "", df$TF_fixed) # add a TF family column based on the last suffix
-  return(df)
+#   df <- data.frame(TF = rownames(motifs), mlog10Padj = assay(motifs)[, 1])
+#   df <- df[order(df$mlog10Padj, decreasing = TRUE), ]
+#   df$rank <- seq_len(nrow(df))
+#   df$TF_fixed <- sub("_.*", "", df$TF) # remove the _number suffix
+# df$TF_family <- sub(".*\\.", "", df$TF_fixed) # add a TF family column based on the last suffix
+#   return(df)
+# }
+motifSEtoDF <- function(motifs) {
+  # Extract the underlying matrix from the SummarizedExperiment object.
+  # as.matrix() ensures it's a standard dense matrix (this safely handles 
+  # underlying sparse dgCMatrix assays from ArchR/Signac)
+  motif_mat <- as.matrix(assay(motifs))
+  
+  # Convert to a data frame and add rownames as a column using tibble
+  df_base <- motif_mat %>%
+    as.data.frame() %>%
+    rownames_to_column("TF")
+  
+  # Check the matrix columns using ncol()
+  if (ncol(motif_mat) > 1) {
+    print("More than 1 discrete cell grouping within this groupBy")
+    
+    # Use tidyr, dplyr, and stringr for pivoting, ranking, and cleaning
+    df <- df_base %>%
+      pivot_longer(cols = -TF, names_to = "group", values_to = "mlog10Padj") %>%
+      group_by(group) %>%
+      mutate(rank = row_number(desc(mlog10Padj))) %>%
+      ungroup() %>%
+      arrange(group, rank) %>%
+      mutate(
+        TF_fixed = str_remove(TF, "_.*"),
+        TF_family = str_remove(TF_fixed, ".*\\.")
+      )
+      
+    return(df)
+    
+  } else {
+    # Single grouping condition
+    df <- df_base %>%
+      rename(mlog10Padj = 2) %>%
+      mutate(rank = row_number(desc(mlog10Padj))) %>%
+      arrange(rank) %>%
+      mutate(
+        TF_fixed = str_remove(TF, "_.*"),
+        TF_family = str_remove(TF_fixed, ".*\\.")
+      )
+      
+    return(df)
+  }
 }
 
 # plot TF rank vs significance
@@ -755,6 +817,7 @@ write_csv(motifsDown_homer.df, here("data","bulkATAC","2025_12-08_human_multiome
 ```
 
 Here we load the bulk atac-seq results from G523, focusing on the comparison of N_BMP vs H_BMP. Motifs enriched in each of those two conditions are identified.
+## Define motif compare plotting functions
 ```{r motif compare plotting functions}
 # from bulk N_BMP_vs_H_BMP
 motifs_df <- read_csv(here("data","bulkATAC","2021-10-09_G523_N_BMP_vs_H_BMP_FDR_HOMER_motifs_bubbleplot.csv"),
@@ -908,6 +971,71 @@ plotMotifEnrichments_new <- function(df, common_tfs_vector, show_labels = TRUE, 
   return(gg)
 }
 ```
+## Define final plotting function
+Here we improve on the plotting function, building upon plotMotifEnrichments(), and plotMotifEnrichments_new().
+
+```{r plotMotifEnrichments_final}
+plotMotifEnrichments_final <- function(df,
+                                       common_tfs_vector = NULL,
+                                       show_labels = TRUE,
+                                       show_labels_qty = 25,
+                                       padj_threshold = 0.05) {
+  
+  # Convert p-adj threshold to -log10 scale
+  mlog10_thresh <- -log10(padj_threshold)
+
+  # 1. Flag common TFs and handle NULL vector
+  if(is.null(common_tfs_vector)) common_tfs_vector <- character(0)
+  df <- df %>% mutate(is_common = TF_cleaned %in% common_tfs_vector)
+  
+  # 2. Base Plot
+  gg <- ggplot(df, aes(x = rank, y = mlog10Padj)) + 
+    geom_hline(yintercept = mlog10_thresh, linetype = "dashed", color = "darkred", alpha = 0.4) +
+    geom_point(aes(color = is_common), shape = 16, size = 2, alpha = 0.7) +
+    scale_color_manual(
+      name = "Common TF", 
+      values = c(`TRUE` = "red", `FALSE` = "grey60"),
+      labels = c(`TRUE` = "Yes", `FALSE` = "No")
+    ) +
+    scale_x_continuous(expand = expansion(mult = c(0.05, 0.25))) + # Extra space for labels
+    labs(y = "-log10(P-adj) Enrichment", x = "Rank Sorted TFs") +
+    theme_minimal() +
+    theme(panel.grid.minor = element_blank())
+
+  # 3. Text Labeling (Shifted Right)
+  if (show_labels) {
+    # Only label those passing threshold
+    significant_df <- df %>% filter(mlog10Padj >= mlog10_thresh)
+    
+    label_data <- if(any(significant_df$is_common)) {
+      significant_df %>% filter(is_common) %>% slice_head(n = show_labels_qty)
+    } else {
+      significant_df %>% slice_head(n = show_labels_qty)
+    }
+    
+    if(nrow(label_data) > 0) {
+      gg <- gg + geom_text_repel(
+        data = label_data,
+        aes(label = TF_cleaned),
+        size = 3.2,
+        color = "black",
+        # Push to the right sidebar
+        force = 5,
+        nudge_x = max(df$rank, na.rm = TRUE) * 0.15,
+        direction = "y",
+        hjust = 0,
+        max.overlaps = 30,
+        box.padding = 0.3,
+        point.padding = 0.5,
+        min.segment.length = 0,
+        segment.color = "grey70"
+      )
+    }
+  }
+  return(gg)
+}
+
+```
 
 ```{r plotting}
 gg_compare1 <-plotMotifEnrichments(df1_cleaned) # [1] 332   6
@@ -995,7 +1123,9 @@ motifs_df3_N_BMP <- motifs_df3 %>%
 motifs_df3_N_VEH <- motifs_df3 %>%
   filter(dataset == "knownmotif_N_VEH_deseq2") # deseq2 was used in thesis
 
-# Function
+# Function: motifCompareReport
+# This function compares the motifs from multiome with those enriched in two other
+# datasets, such as from bulk ATAC-seq from GSCs
 # multiome_df dataframe with human multiome homer motif results 
 # gsc_motif_df_1 dataframe from GSC # 1
 # gsc_motif_df_2 dataframe from GSC # 2
@@ -1285,6 +1415,220 @@ dev.off()
 ```
 
 
+
+
+# Motif Compare: Human Multiome k3_program scPOS-MP
+```{r}
+# SE objects from ArchR output
+markersPeak_k3_program
+k3_motifsUp
+k3_motifsDown
+
+# EDA on SE object
+assay(markersPeak_k3_program)
+
+# updated motifSEtoDF function
+motifSEtoDF <- function(motifs) {
+  # Extract the underlying matrix from the SummarizedExperiment object.
+  # as.matrix() ensures it's a standard dense matrix (this safely handles 
+  # underlying sparse dgCMatrix assays from ArchR/Signac)
+  motif_mat <- as.matrix(assay(motifs))
+  
+  # Convert to a data frame and add rownames as a column using tibble
+  df_base <- motif_mat %>%
+    as.data.frame() %>%
+    rownames_to_column("TF")
+  
+  # Check the matrix columns using ncol()
+  if (ncol(motif_mat) > 1) {
+    print("More than 1 discrete cell grouping within this groupBy")
+    
+    # Use tidyr, dplyr, and stringr for pivoting, ranking, and cleaning
+    df <- df_base %>%
+      pivot_longer(cols = -TF, names_to = "group", values_to = "mlog10Padj") %>%
+      group_by(group) %>%
+      mutate(rank = row_number(desc(mlog10Padj))) %>%
+      ungroup() %>%
+      arrange(group, rank) %>%
+      mutate(
+        TF_fixed = str_remove(TF, "_.*"),
+        TF_family = str_remove(TF_fixed, ".*\\.")
+      )
+      
+    return(df)
+    
+  } else {
+    # Single grouping condition
+    df <- df_base %>%
+      rename(mlog10Padj = 2) %>%
+      mutate(rank = row_number(desc(mlog10Padj))) %>%
+      arrange(rank) %>%
+      mutate(
+        TF_fixed = str_remove(TF, "_.*"),
+        TF_family = str_remove(TF_fixed, ".*\\.")
+      )
+      
+    return(df)
+  }
+}
+
+# Convert motifs SE to df
+k3_motifsUp.df <- motifSEtoDF(k3_motifsUp)
+k3_motifsDown.df <- motifSEtoDF(k3_motifsDown)
+
+k3_motifsUp.df
+k3_motifsDown.df
+
+# additional homer motifs cleaning so motifs match b/w multiome and bulk ATAC 
+k3_motifsUp.df_cleaned <- homer_motif_cleaning(k3_motifsUp.df)
+k3_motifsDown.df_cleaned <- homer_motif_cleaning(k3_motifsDown.df)
+
+# plotMotifEnrichments for each group
+# plotMotifEnrichments_new <- function(df, common_tfs_vector, show_labels = TRUE, show_labels_qty = 25) 
+
+# default
+k3_motifsUp.df_cleaned %>% 
+    filter(group == "program_1") %>%  
+    plotMotifEnrichments_final() +
+  ggtitle("Human Multiome: motifsUp scPOS-MP k3_program (program_1)",
+          subtitle = "Top 25 motifs padj<0.05")
+
+# compare to motifsUp homer (original dataset PIMOup_vs_PIMOdown)
+
+homer_motif_cleaning(motifsUp_homer.df) %>% 
+  filter(mlog10Padj > 1.30103) %>%
+  pull(TF_cleaned)
+
+homer_motif_cleaning(motifsDown_homer.df) %>% 
+  filter(mlog10Padj > 1.30103) %>%
+  pull(TF_cleaned)
+
+# human multiome motifsUp (k3_program) vs human multiome motifsUp (original dataset PIMOup_vs_PIMOdown) 
+common_OG_vs_k3_motifsUp <- 
+  homer_motif_cleaning(motifsUp_homer.df) %>%
+    filter(mlog10Padj > 1.30103) %>%
+    pull(TF_cleaned)
+
+common_OG_vs_k3_motifsDown <- 
+  homer_motif_cleaning(motifsDown_homer.df) %>%
+    filter(mlog10Padj > 1.30103) %>%
+    pull(TF_cleaned)
+
+
+```
+## export PDF
+```{r export pdf, eval = FALSE}
+pdf(here("Plots","2026-03-09_human_multiome_k3_program_motifs_homer_motif_ranking.pdf"))
+
+# default
+k3_motifsUp.df_cleaned %>% 
+    filter(group == "program_1") %>%  
+    plotMotifEnrichments_final() +
+  ggtitle("Human Multiome: motifsUp scPOS-MP k3_program (program_1)",
+          subtitle = "Top 25 motifs padj<0.05")
+
+k3_motifsUp.df_cleaned %>% 
+    filter(group == "program_2") %>%  
+    plotMotifEnrichments_final() +
+  ggtitle("Human Multiome: motifsUp scPOS-MP k3_program (program_2)",
+          subtitle = "Top 25 motifs padj<0.05")
+
+k3_motifsUp.df_cleaned %>% 
+    filter(group == "program_3") %>%  
+    plotMotifEnrichments_final() +
+  ggtitle("Human Multiome: motifsUp scPOS-MP k3_program (program_3)",
+          subtitle = "Top 25 motifs padj<0.05")
+
+
+k3_motifsDown.df_cleaned %>% 
+    filter(group == "program_1") %>%  
+    plotMotifEnrichments_final() +
+  ggtitle("Human Multiome: motifsDown scPOS-MP k3_program (program_1)",
+          subtitle = "Top 25 motifs padj<0.05")
+
+k3_motifsDown.df_cleaned %>% 
+    filter(group == "program_2") %>%  
+    plotMotifEnrichments_final() +
+  ggtitle("Human Multiome: motifsDown scPOS-MP k3_program (program_2)",
+          subtitle = "Top 25 motifs padj<0.05")
+
+k3_motifsDown.df_cleaned %>% 
+    filter(group == "program_3") %>%  
+    plotMotifEnrichments_final() +
+  ggtitle("Human Multiome: motifsDown scPOS-MP k3_program (program_3)",
+          subtitle = "Top 25 motifs padj<0.05")
+dev.off()
+
+
+
+pdf(here("Plots","2026-03-09_human_multiome_k3_program_vs_PIMOup_vs_PIMOdown_motifs_homer_motif_ranking.pdf"))
+
+# compared to human_multiome PIMOup_vs_PIMOdown
+
+k3_motifsUp.df_cleaned %>% 
+    filter(group == "program_1") %>%  
+    plotMotifEnrichments_final(common_tfs_vector = common_OG_vs_k3_motifsUp) +
+  ggtitle("Human Multiome: motifsUp scPOS-MP k3_program (program_1)",
+          subtitle = "Compared to motifsUp PIMOup_vs_PIMOdown padj<0.05")
+
+k3_motifsUp.df_cleaned %>% 
+    filter(group == "program_2") %>%  
+    plotMotifEnrichments_final(common_tfs_vector = common_OG_vs_k3_motifsUp) +
+  ggtitle("Human Multiome: motifsUp scPOS-MP k3_program (program_2)",
+          subtitle = "Compared to motifsUp PIMOup_vs_PIMOdown padj<0.05")
+
+k3_motifsUp.df_cleaned %>% 
+    filter(group == "program_3") %>%  
+    plotMotifEnrichments_final(common_tfs_vector = common_OG_vs_k3_motifsUp) +
+  ggtitle("Human Multiome: motifsUp scPOS-MP k3_program (program_3)",
+          subtitle = "Compared to motifsUp PIMOup_vs_PIMOdown padj<0.05")
+
+k3_motifsDown.df_cleaned %>% 
+    filter(group == "program_1") %>%  
+    plotMotifEnrichments_final(common_tfs_vector = common_OG_vs_k3_motifsDown) +
+  ggtitle("Human Multiome: motifsDown scPOS-MP k3_program (program_1)",
+          subtitle = "Compared to motifsDown PIMOup_vs_PIMOdown padj<0.05")
+
+k3_motifsDown.df_cleaned %>% 
+    filter(group == "program_2") %>%  
+    plotMotifEnrichments_final(common_tfs_vector = common_OG_vs_k3_motifsDown) +
+  ggtitle("Human Multiome: motifsDown scPOS-MP k3_program (program_2)",
+          subtitle = "Compared to motifsDown PIMOup_vs_PIMOdown padj<0.05")
+
+k3_motifsDown.df_cleaned %>% 
+    filter(group == "program_3") %>%  
+    plotMotifEnrichments_final(common_tfs_vector = common_OG_vs_k3_motifsDown) +
+  ggtitle("Human Multiome: motifsDown scPOS-MP k3_program (program_3)",
+          subtitle = "Compared to motifsDown PIMOup_vs_PIMOdown padj<0.05")
+
+dev.off()
+
+```
+## export motifs for supplemental table
+```{r export motifs for supplement, eval = FALSE}
+
+write_csv(
+  k3_motifsUp.df_cleaned,
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_k3_program",
+    "motifEnrichment_homer_k3_program",
+    "motifsUp_k3program_homer.csv"
+  )
+)
+write_csv(
+  k3_motifsDown.df_cleaned,
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_k3_program",
+    "motifEnrichment_homer_k3_program",
+    "motifsDown_k3program_homer.csv"
+  )
+)
+
+```
 
 # check h5 file integrity
 ```{r check h5 files}
