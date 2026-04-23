@@ -1,0 +1,539 @@
+---
+title: "multiome_Supplemental_Tables"
+author: "Ronald Wu"
+date: "2026-03-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Install Packages
+```{r install packages, eval = FALSE}
+install.packages("writexl")
+```
+
+# Load Packages
+```{r load packages}
+library(tidyverse)
+library(writexl)
+library(here)
+```
+
+# Dataset description
+
+Three specific datasets:
+1. human_multiome
++ PeakSet
+  + PIMO_up_status
+  + k3_program (cNMF scPOS-MPs)
+  + meta_module (nomura states)
++ motifEnrichment
+  +
+  +
+  +
+2. gaiti_multiome
+3. mouse_multiome
+
+table contents for each dataset
+a) peak set or consensus peakset (matches MA plot numbers)
+b) DA peaks for groupBy=PIMO_up_status
+c) Motif enrichment for groupBy=PIMO_up_status
+
+# Load peakSet (consensus peaks)
+In ArchR, the generation of a consensus peak set is slightly different from traditional bulk ATAC-seq. Specifically, here an iterative overlap procedure is used to produce a reproducible peak set for each group contained in a specified groupBy column of interest in the metadata, such as clusters, PIMO_up_status, others.
+
+In ArchR, only a single peakSet can be active, thus if multiple peak set are made for different groupBy of interest, addPeakSet() can be used to assign a new peakSet GRanges object to the ArchRProject object.
+## human_multiome
+```{r loading human_multiome peaksets}
+# load GRanges peakSet:
+
+# human_multiome:
+  # 1. PIMO_up_status
+peakSet_PIMO_up_status <-
+  readRDS(
+    here(
+      "data",
+      "human_multiome",
+      "human_multiome_harmony_merged_malig_peak",
+      "PeakCalls",
+      "PeakSet_gr_PIMO_up_status.rds"
+    )
+  )
+  # 2. k3_program
+peakSet_k3_program <-
+  readRDS(
+    here(
+      "data",
+      "human_multiome",
+      "human_multiome_hmmp_k3_program",
+      "PeakCalls",
+      "PeakSet_gr_k3_program.rds"
+    )
+  )
+  # 3. meta_module (nomura states)
+peakSet_meta_module <-
+  readRDS(
+    here(
+      "data",
+      "human_multiome",
+      "human_multiome_hmmp_nomura",
+      "PeakCalls",
+      "PeakSet_gr_meta_module.rds"
+    )
+  )
+```
+## Gaiti_multiome
+```{r loading Gaiti_multiome peaksets}
+# gaiti_multome
+# 1. PIMO_up_status
+peakSet_PIMO_up_status_Gaiti <-
+  readRDS(
+    here(
+      "data",
+      "Gaiti_multiome",
+      "Gaiti_multiome_harmony_merged_malig_peak",
+      "PeakCalls",
+      "PeakSet_gr_PIMO_up_status.rds"
+    )
+  )
+# 2. PIMO_Region (PIMO_up_status with Region.Annotation)
+peakSet_PIMO_Region_Gaiti <-
+  readRDS(
+    here(
+      "data",
+      "Gaiti_multiome",
+      "Gaiti_multiome_harmony_merged_malig_peak",
+      "PeakCalls",
+      "PeakSet_gr_PIMO_Region.rds"
+    )
+  )
+# 3. Region.annotation
+peakSet_Region.annotation_Gaiti <-
+  readRDS(
+    here(
+      "data",
+      "Gaiti_multiome",
+      "Gaiti_multiome_harmony_merged_malig_peak",
+      "PeakCalls",
+      "PeakSet_gr_Region.annotation.rds"
+    )
+  )
+```
+## mouse_multiome
+```{r loading mouse_multiome peaksets}
+# mouse_multiome
+
+  # 1. PIMO_up_status
+peakSet_PIMO_up_status_mouse <-
+  readRDS(
+    here(
+      "data",
+      "mouse_multiome",
+      "mouse_multiome_harmony_merged_malig_peak_subset",
+      "PeakCalls",
+      "PeakSet_gr_PIMO_up_status.rds"
+    )
+  )
+```
+
+## EDA on peaksets
+```{r eda on peaksets}
+library(GenomicRanges)
+gr_eda <-function(gr){
+cat("total number of ranges: ", length(gr),"\n")        # Total number of ranges
+cat("basic summary of object: ", summary(gr),"\n")       # Basic summary of the object
+seqinfo(gr)   # Information about the chromosomes (lengths, circularity)
+
+table(seqnames(gr))
+}
+
+# call function
+gr_eda(peakSet_PIMO_up_status)
+
+peakSet_PIMO_up_status
+peakSet_k3_program
+peakSet_meta_module
+peakSet_PIMO_up_status_mouse
+```
+# Load marker peaks and marker test
+## human_multiome:
+```{r load markerPeaks/markersTest}
+# For PIMOup vs PIMOdown (useGroups=PIMOup, bgdGroups = PIMOdown)
+# SE
+markersTest <- readRDS(
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_harmony_merged_malig_peak",
+    "PeakCalls",
+    "markersTest_PIMO_up_status_PIMOup_vs_PIMOdown.rds"
+  )
+)
+# GR
+markersTest_gr <- readRDS(
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_harmony_merged_malig_peak",
+    "PeakCalls",
+    "markersTest_GR_PIMO_up_status_PIMOup_vs_PIMOdown.rds"
+  )
+)
+```
+
+
+```{r eda on markerspeaks/markersTest}
+# EDA on markerTest peaks
+markersTest # dim: 179499 1
+markersTest_gr$PIMOup # 178910
+
+edaPeaks <- function(gr){
+cat("number of ranges:", length(gr),"\n")
+
+up <- subset(gr, FDR <= 0.1 & Log2FC >= 0.5) %>%
+  length()
+down <- subset(gr, FDR <= 0.1 & Log2FC <= -0.5) %>%
+  length()
+cat("threshold", "FDR <= 0.1 & Log2FC >= 0.5\n")
+cat("number of up/open peaks:", up,"\n")
+cat("threshold", "FDR <= 0.1 & Log2FC <= -0.5\n")
+cat("number of down/closed peaks:", down,"\n")
+}
+
+
+
+edaPeaks(markersTest_gr$PIMOup)
+
+# Differentially Accessible Peaks
+sapply(assays(markersTest), function(x) sum(is.na(x)))
+```
+markersTest vs markersTest_gr:
+179499 vs 178910
+-why is 589 peak difference? FDR has 589 NAs!, which is removed in the gr.
+## Gaiti_multiome
+The markersTest files were originally made incorrectly with the peakCalling script, and run_05b_Gaiti_multiome_pairwiseTesting.sh was used to assign the proper peakSet to generate the correct pairwise results.
+```{r load markerPeaks/markersTest gaiti}
+# For PIMOup_TC_vs_PIMOdown_TC (useGroups=PIMOup_TC, bgdGroups = PIMOdown_TC)
+# SE
+
+markersTest_PIMOup_TC_vs_PIMOdown_TC <- readRDS(
+  here(
+    "data",
+    "Gaiti_multiome",
+    "Gaiti_multiome_harmony_merged_malig_peak",
+    "PeakCalls",
+    "2026-04-06",
+    "markersTest_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC.rds"
+  )
+)
+# GR
+markersTest_gr_PIMOup_TC_vs_PIMOdown_TC <- readRDS(
+  here(
+    "data",
+    "Gaiti_multiome",
+    "Gaiti_multiome_harmony_merged_malig_peak",
+    "PeakCalls",
+    "2026-04-06",
+    "markersTest_GR_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC.rds"
+  )
+)
+sapply(assays(markersTest_PIMOup_TC_vs_PIMOdown_TC), function(x) sum(is.na(x)))
+edaPeaks(markersTest_gr_PIMOup_TC_vs_PIMOdown_TC$PIMOup)
+```
+
+# Load motifEnrichment: motifsUp and motifsDown
+## human_multiome:
+### PIMO_up_status (pairwise)
+```{r load PIMO_up_status (pairwise)}
+motifsUp_homer.df_cleaned <- read_csv(
+  here(
+    "data",
+    "human_multiome",
+    "motifEnrichment_homer_PIMO_up_status",
+    "motifsUp_PIMO_up_status_PIMOup_vs_PIMOdown_homer.csv"
+  )
+) %>% # additional cleaning for excel export
+  dplyr::select(c(-TF, -TF_fixed)) %>%
+  rename(TF = TF_cleaned) %>%
+  relocate(TF, .before = 1)
+
+motifsDown_homer.df_cleaned <- read_csv(
+  here(
+    "data",
+    "human_multiome",
+    "motifEnrichment_homer_PIMO_up_status",
+    "motifsDown_PIMO_up_status_PIMOup_vs_PIMOdown_homer.csv"
+  )
+) %>% # additional cleaning for excel export
+  dplyr::select(c(-TF, -TF_fixed)) %>%
+  rename(TF = TF_cleaned) %>%
+  relocate(TF, .before = 1)
+```
+### k3_program
+Note: Extra column called `group` that has program_1, program_2, program_3
+```{r load k3_program}
+
+k3_motifsUp.df_cleaned <- read_csv(
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_k3_program",
+    "motifEnrichment_homer_k3_program",
+    "motifsUp_k3program_homer.csv"
+  )
+) %>% # additional cleaning for excel export
+  dplyr::select(c(-TF, -TF_fixed)) %>%
+  rename(TF = TF_cleaned) %>%
+  relocate(TF, .before = 1)
+
+k3_motifsDown.df_cleaned <-
+  read_csv(
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_k3_program",
+    "motifEnrichment_homer_k3_program",
+    "motifsDown_k3program_homer.csv"
+  )
+) %>% # additional cleaning for excel export
+  dplyr::select(c(-TF, -TF_fixed)) %>%
+  rename(TF = TF_cleaned) %>%
+  relocate(TF, .before = 1)
+```
+
+### meta_module (nomura states)
+Note: Extra column called `group` that has all the 10nomura states
+```{r load meta_module nomura states}
+
+nomura_motifsUp.df_cleaned <- read_csv(
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_nomura",
+    "motifEnrichment_homer_meta_module",
+    "motifsUp_meta_module_homer.csv"
+  )
+) %>% # additional cleaning for excel export
+  dplyr::select(c(-TF, -TF_fixed)) %>%
+  rename(TF = TF_cleaned) %>%
+  relocate(TF, .before = 1)
+
+nomura_motifsDown.df_cleaned <- read_csv(
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_nomura",
+    "motifEnrichment_homer_meta_module",
+    "motifsDown_meta_module_homer.csv"
+  )
+) %>% # additional cleaning for excel export
+  dplyr::select(c(-TF, -TF_fixed)) %>%
+  rename(TF = TF_cleaned) %>%
+  relocate(TF, .before = 1)
+```
+
+## Gaiti_multiome:
+### PIMO_Region (pairwise)
+```{r load PIMO_Region from Gaiti_multiome}
+
+motifsUp_PIMOupTCvsPIMOdownTC.df_cleaned <- read_csv(
+  here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC",
+    "motifsUp_PIMORegion_PIMOupTCvsPIMOdownTC_homer.csv"
+  )
+) %>% # additional cleaning for excel export
+  dplyr::select(c(-TF, -TF_fixed)) %>%
+  rename(TF = TF_cleaned) %>%
+  relocate(TF, .before = 1)
+
+motifsDown_PIMOupTCvsPIMOdownTC.df_cleaned <- read_csv(
+  here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC",
+    "motifsDown_PIMORegion_PIMOupTCvsPIMOdownTC_homer.csv"
+  )
+) %>% # additional cleaning for excel export
+  dplyr::select(c(-TF, -TF_fixed)) %>%
+  rename(TF = TF_cleaned) %>%
+  relocate(TF, .before = 1)
+```
+
+# peakSet to excel
+
+```{r peakSet to excel sheet}
+#' Export a list of GRanges objects and additional data frames to a single Excel file
+#'
+#' @param gr_list A named list of GRanges objects
+#' @param extra_sheets A named list of standard data frames (optional)
+#' @param file_path The path where the Excel file will be saved
+#' @param workbook_description A plain text string explaining the contents of the Excel file
+export_master_excel <- function(gr_list, extra_sheets = NULL, file_path, workbook_description = "Supplemental multiome data.") {
+  
+  # 1. Validate GRanges Input
+  if (!is.list(gr_list) || !all(vapply(gr_list, inherits, logical(1), "GRanges"))) {
+    stop("gr_list must be a list containing ONLY GRanges objects.")
+  }
+  
+  # 2. Helper function to ensure lists have valid names
+  ensure_names <- function(lst, prefix) {
+    if (is.null(names(lst))) names(lst) <- paste0(prefix, seq_along(lst))
+    empty_names <- names(lst) == ""
+    if (any(empty_names)) names(lst)[empty_names] <- paste0(prefix, which(empty_names))
+    return(lst)
+  }
+  gr_list <- ensure_names(gr_list, "GRanges_")
+  
+  # 3. Create Row 1: The Workbook Overview / Description
+  desc_df <- data.frame(
+    Sheet_Name = "ALL SHEETS",
+    Data_Type = "Workbook Overview",
+    Total_Rows_or_Ranges = NA,
+    Total_Columns = NA,
+    Key_Details = workbook_description,
+    stringsAsFactors = FALSE
+  )
+  
+  # 4. Create the Summary Rows for GRanges
+  gr_summary_list <- lapply(names(gr_list), function(name) {
+    gr <- gr_list[[name]]
+    data.frame(
+      Sheet_Name = name,
+      Data_Type = "Genomic Ranges",
+      Total_Rows_or_Ranges = length(gr),
+      Total_Columns = ncol(mcols(gr)),
+      Key_Details = paste0("Chrs: ", paste(head(seqlevelsInUse(gr), 5), collapse = ", "), 
+                           " | Avg Width: ", round(mean(width(gr)), 2)),
+      stringsAsFactors = FALSE
+    )
+  })
+  gr_summary_df <- do.call(rbind, gr_summary_list)
+  
+  # 5. Create the Summary Rows for extra_sheets (if any)
+  if (!is.null(extra_sheets)) {
+    if (!is.list(extra_sheets) || !all(vapply(extra_sheets, is.data.frame, logical(1)))) {
+      stop("extra_sheets must be a named list containing ONLY data frames.")
+    }
+    extra_sheets <- ensure_names(extra_sheets, "Sheet_")
+    
+    extra_summary_list <- lapply(names(extra_sheets), function(name) {
+      df <- extra_sheets[[name]]
+      data.frame(
+        Sheet_Name = name,
+        Data_Type = "Data Frame",
+        Total_Rows_or_Ranges = nrow(df),
+        Total_Columns = ncol(df),
+        Key_Details = paste0("Cols: ", paste(head(colnames(df), 5), collapse = ", ")),
+        stringsAsFactors = FALSE
+      )
+    })
+    extra_summary_df <- do.call(rbind, extra_summary_list)
+  } else {
+    extra_summary_df <- NULL
+  }
+  
+  # 6. Combine all summaries into one Master Summary DF
+  master_summary_df <- rbind(desc_df, gr_summary_df, extra_summary_df)
+  
+  # 7. Convert all GRanges to standard Data Frames
+  data_list <- lapply(gr_list, function(gr) {
+    if (!is.null(names(gr))) {
+      gr$range_name <- names(gr)
+      names(gr) <- NULL
+    }
+    as.data.frame(gr)
+  })
+  
+  # 8. Combine Summary, GRanges DFs, and Extra DFs into the final sheets list
+  sheets_list <- c(list(Master_Summary = master_summary_df), data_list)
+  if (!is.null(extra_sheets)) {
+    sheets_list <- c(sheets_list, extra_sheets)
+  }
+  
+  # 9. Safety check: Excel limits sheet names to 31 characters
+  names(sheets_list) <- substr(names(sheets_list), 1, 31)
+  
+  # 10. Write to Excel
+  write_xlsx(sheets_list, path = file_path)
+  
+  # Calculate extra sheets length safely for the message
+  extra_len <- ifelse(is.null(extra_sheets), 0, length(extra_sheets))
+  message(sprintf("Successfully exported %d GRanges objects and %d additional sheets to %s", 
+                  length(gr_list), extra_len, file_path))
+}
+```
+## export supplemental table 5 human multiome
+```{r useage, eval = FALSE}
+# optional: Package the motifs into a named list
+
+motif_sheets <- list(
+  "PIMO_up_status_motifsUp" = motifsUp_homer.df_cleaned,
+  "PIMO_up_status_motifsDown" = motifsDown_homer.df_cleaned,
+  "k3_program_motifsUp" = k3_motifsUp.df_cleaned,
+  "k3_program_motifsDown" = k3_motifsDown.df_cleaned,
+  "nomura_motifsUp" = nomura_motifsUp.df_cleaned,
+  "nomura_motifsDown" = nomura_motifsUp.df_cleaned
+)
+
+# 3. Package your GRanges objects into a named list 
+# (Using your existing PIMO_up_status as the base)
+my_gr_list <- list(
+  "PIMO_up_status_peakSet" = peakSet_PIMO_up_status,
+  "PIMO_up_status_DAR_up" = subset(markersTest_gr$PIMOup, FDR <= 0.1 &
+                                     Log2FC >= 0.5),
+  "PIMO_up_status_DAR_down" = subset(markersTest_gr$PIMOup, FDR <= 0.1 &
+                                       Log2FC <= -0.5),
+  "k3_program_peakSet" = peakSet_k3_program,
+  "nomura_peakSet" = peakSet_meta_module
+)
+
+# 4. Export the consolidated workbooks
+
+# human_multiome:
+export_master_excel(
+  gr_list = my_gr_list,
+  extra_sheets = motif_sheets,
+  file_path = here(
+    "figures", 
+    "supplemental_table", 
+    "Supplementary_table_5.xlsx"
+  ),
+  workbook_description = "This workbook contains consensus peak sets and enriched motifs for the human multiome dataset. The associated tables were generated for each group of interest: PIMO_up_status, k3_program, and nomura"
+)
+
+
+
+```
+
+## export supplementary table 6 Gaiti multiome
+```{r useage supplementary table 6, eval = FALSE}
+motif_sheets <- list(
+  "PIMOupTCvsPIMOdownTCmotifsUp" = motifsUp_PIMOupTCvsPIMOdownTC.df_cleaned,
+  "PIMOupTCvsPIMOdownTCmotifsDown" = motifsDown_PIMOupTCvsPIMOdownTC.df_cleaned
+)
+
+# gaiti_multiome
+export_master_excel(
+  gr_list = list(
+    "PIMO_Region_peakSet" = peakSet_PIMO_Region_Gaiti,
+    "PIMO_Region_DAR_up" = subset(markersTest_gr_PIMOup_TC_vs_PIMOdown_TC$PIMOup, FDR <= 0.1 &
+                                     Log2FC >= 0.5),
+    "PIMO_Region_DAR_down" = subset(markersTest_gr_PIMOup_TC_vs_PIMOdown_TC$PIMOup, FDR <= 0.1 &
+                                       Log2FC <= -0.5),
+    "PIMO_up_status_peakSet" = peakSet_PIMO_up_status_Gaiti,
+    "Region.annotation_peakSet" = peakSet_Region.annotation_Gaiti
+  ),
+  extra_sheets = motif_sheets,
+  file_path = here(
+    "figures", 
+    "supplemental_table", 
+    "Supplementary_table_6.xlsx"
+  ),
+  workbook_description = "This workbook contains consensus peak sets and enriched motifs for the Wu et al dataset (Gaiti multiome). The associated tables were generated for each group of interest: PIMO_Region, PIMO_up_status, and Region.annotation"
+)
+
+```
