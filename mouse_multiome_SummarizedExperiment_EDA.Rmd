@@ -27,8 +27,53 @@ library(ComplexHeatmap)
 
 # Load marker features: SummarizedExperiment and GRanges Object
 ```{r load SE and GRanges from getMarkerFeatures}
-```
+# SE PIMO_up_status non-pairwise
 
+markersPeak <- readRDS(
+  here(
+    "Plots",
+    "mouse_multiome",
+    "mouse_multiome_harmony_merged_malig_peak_subset",
+    "markersPeaks_PIMO_up_status.rds"
+  )
+)
+dim(markersPeak) # [1] 203151      3
+
+# SimpleList of GRanges result from peakCalling
+# This is extracted from above via ArchR::getMarkers()
+markersPeak_gr <- readRDS(
+  here(
+    "Plots",
+    "mouse_multiome",
+    "mouse_multiome_harmony_merged_malig_peak_subset",
+    "markersPeaks_GR_PIMO_up_status.rds"
+  )
+)
+
+# For PIMOup vs PIMOdown (useGroups=PIMOup, bgdGroups = PIMOdown)
+# SE
+markersTest <- readRDS(
+  here(
+    "Plots",
+    "mouse_multiome",
+    "mouse_multiome_harmony_merged_malig_peak_subset",
+    "markersTest_PIMO_up_status_PIMOup_vs_PIMOdown.rds"
+  )
+)
+#GR
+markersTest_gr <- readRDS(
+  here(
+    "Plots",
+    "mouse_multiome",
+    "mouse_multiome_harmony_merged_malig_peak_subset",
+    "markersTest_GR_PIMO_up_status_PIMOup_vs_PIMOdown.rds"
+  )
+)
+
+```
+The consensus peaks for PIMO_up_status are the same for both modes:
+1. non-pairwise: 203151
+2. pairwise (PIMOup_vs_PIMOdown): 203151
 # Load motifEnrichment Results
 
 ```{r load motifEnrichment results}

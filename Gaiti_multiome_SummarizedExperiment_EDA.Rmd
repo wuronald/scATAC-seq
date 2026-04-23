@@ -489,6 +489,50 @@ p7+p8
 dev.off()
 ```
 
+## export motifs for supplemental table
+```{r export motifs for supplement, eval = FALSE}
+# convert SE to DF
+motifsUp_PIMOupEBvsPIMOupTC.df_cleaned <- motifsUp_PIMOupEBvsPIMOupTC.df %>%
+  homer_motif_cleaning()
+motifsDown_PIMOupEBvsPIMOupTC.df_cleaned <- motifsDown_PIMOupEBvsPIMOupTC.df %>%
+  homer_motif_cleaning()
+
+motifsUp_PIMOupEBvsPIMOdownEB.df_cleaned <- motifsUp_PIMOupEBvsPIMOdownEB.df %>%
+  homer_motif_cleaning()
+motifsDown_PIMOupEBvsPIMOdownEB.df_cleaned <- motifsDown_PIMOupEBvsPIMOdownEB.df %>%
+  homer_motif_cleaning()
+
+motifsUp_PIMOupPTvsPIMOdownPT.df_cleaned <- motifsUp_PIMOupPTvsPIMOdownPT.df %>%
+  homer_motif_cleaning()
+motifsDown_PIMOupPTvsPIMOdownPT.df_cleaned <- motifsDown_PIMOupPTvsPIMOdownPT.df %>%
+  homer_motif_cleaning()
+
+motifsUp_PIMOupTCvsPIMOdownTC.df_cleaned <- motifsUp_PIMOupTCvsPIMOdownTC.df %>%
+  homer_motif_cleaning()
+motifsDown_PIMOupTCvsPIMOdownTC.df_cleaned <- motifsDown_PIMOupTCvsPIMOdownTC.df %>%
+  homer_motif_cleaning()
+
+write_csv(
+  motifsUp_PIMOupTCvsPIMOdownTC.df_cleaned,
+  here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC",
+    "motifsUp_PIMORegion_PIMOupTCvsPIMOdownTC_homer.csv"
+  )
+)
+write_csv(
+  motifsDown_PIMOupTCvsPIMOdownTC.df_cleaned,
+  here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC",
+    "motifsDown_PIMORegion_PIMOupTCvsPIMOdownTC_homer.csv"
+  )
+)
+
+```
+
 # Summarize significant motifs and compare across PIMO_Region conditions
 ```{r motif summary}
 motifsUp_PIMOupEBvsPIMOupTC.df %>%
