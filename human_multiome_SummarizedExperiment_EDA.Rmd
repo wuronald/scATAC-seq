@@ -76,9 +76,10 @@ motifsUp <- readRDS(file = here("data", "human_multiome", "motifEnrichment", "mo
 motifsDown <- readRDS(file = here("data", "human_multiome", "motifEnrichment", "motifsDown_PIMOup_vs_PIMOdown.rds"))
 chromVarDev <- readRDS(file = here("data", "human_multiome", "motifEnrichment", "chromVarDeviations_PIMOup_vs_PIMOdown.rds"))
 
-# motifSet = homer
-motifsUp_homer <- readRDS(file = here("data", "human_multiome", "motifEnrichment_homer", "motifsUp_PIMOup_vs_PIMOdown_homer.rds"))
-motifsDown_homer <- readRDS(file = here("data", "human_multiome", "motifEnrichment_homer", "motifsDown_PIMOup_vs_PIMOdown_homer.rds"))
+# motifSet = homer (# see below for updated with PIMO70_b)
+#motifsUp_homer <- readRDS(file = here("data", "human_multiome", "motifEnrichment_homer", "motifsUp_PIMOup_vs_PIMOdown_homer.rds"))
+#motifsDown_homer <- readRDS(file = here("data", "human_multiome", "motifEnrichment_homer", "motifsDown_PIMOup_vs_PIMOdown_homer.rds"))
+
 chromVarDev_homer <- readRDS(file = here("data", "human_multiome", "motifEnrichment_homer", "chromVarDeviations_PIMOup_vs_PIMOdown_homer.rds"))
 
 # check class of objects
@@ -139,6 +140,29 @@ k3_motifsUp <- readRDS(file = here("data", "human_multiome", "human_multiome_hmm
 k3_motifsDown <- readRDS(file = here("data", "human_multiome", "human_multiome_hmmp_k3_program",
                                 "motifEnrichment_homer_k3_program",
                                 "motifsDown_k3program_homer.rds"))
+```
+
+# load nomura states (meta_module) motifs
+```{r load nomura states (meta_module) motifs}
+nomura_motifsUp <- readRDS(
+  file = here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_nomura",
+    "motifEnrichment_homer_meta_module",
+    "motifsUp_metamodule_homer.rds"
+  )
+)
+
+nomura_motifsDown <- readRDS(
+  file = here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_nomura",
+    "motifEnrichment_homer_meta_module",
+    "motifsDown_metamodule_homer.rds"
+  )
+)
 ```
 
 ## load custom enrichment with bulk ATAC in multiome
@@ -392,11 +416,11 @@ plotMotifEnrichments(motifsDown.df, highlight_TF) +
 
 motifsUp_homer.df <- motifSEtoDF(motifsUp_homer)
 motifsDown_homer.df <- motifSEtoDF(motifsDown_homer)
-ms_motifsUp.df <- motifSEtoDF(ms_motifsUp_homer)
+#ms_motifsUp.df <- motifSEtoDF(ms_motifsUp_homer)
 
 ggUp_homer <- plotMotifEnrichments(motifsUp_homer.df)
 ggDown_homer <- plotMotifEnrichments(motifsDown_homer.df)
-ggup_ms_homer <- plotMotifEnrichments(ms_motifsUp.df)
+#ggup_ms_homer <- plotMotifEnrichments(ms_motifsUp.df)
 
 ggUp_homer + 
   ggtitle("Enriched Motifs PIMOup vs PIMOdown", 
@@ -406,8 +430,7 @@ ggDown_homer +
           subtitle = "top 15 motifsDown homer")
 
 # mouse multiome (move later)
-ggup_ms_homer +
-  ggtitle("mouse multiome")
+#ggup_ms_homer + ggtitle("mouse multiome")
 
 # highlight motifs of interest
 highlight_TF <- c("HIF1A","ARNT", "SOX2", "SOX3", "SOX4", 
@@ -817,8 +840,9 @@ write_csv(motifsDown_homer.df, here("data","bulkATAC","2025_12-08_human_multiome
 ```
 
 Here we load the bulk atac-seq results from G523, focusing on the comparison of N_BMP vs H_BMP. Motifs enriched in each of those two conditions are identified.
-## Define motif compare plotting functions
-```{r motif compare plotting functions}
+
+## load bulk ATAC-seq: G523
+```{r load GSC G523 bulk ATAC-seq}
 # from bulk N_BMP_vs_H_BMP
 motifs_df <- read_csv(here("data","bulkATAC","2021-10-09_G523_N_BMP_vs_H_BMP_FDR_HOMER_motifs_bubbleplot.csv"),
                       col_names=TRUE)
@@ -829,6 +853,255 @@ motifs_df_H_BMP <- motifs_df %>%
 motifs_df_N_BMP <- motifs_df %>%
   filter(dataset == "knownmotif_N_BMP_deseq2") # deseq2 was used in thesis
 
+G523_N_VEH_vs_H_VEH_motifs_df <- read_csv(
+here("data","bulkATAC","2021-04-17_G523_N_VEH_vs_H_VEH_FDR_HOMER_motifs_bubbleplot.csv")
+)
+
+G523_N_VEH_vs_N_BMP_motifs_df <- read_csv(
+here("data","bulkATAC","2021-10-10_2021-10-08_G523_N_VEH_vs_N_BMP_FDR_HOMER_motifs_bubbleplot.csv")
+)
+
+# quick EDA
+G523_motif_lt <- list(
+  G523_N_BMP_vs_H_BMP = motifs_df,
+  G523_N_VEH_vs_H_VEH = G523_N_VEH_vs_H_VEH_motifs_df,
+  G523_N_VEH_vs_N_BMP = G523_N_VEH_vs_N_BMP_motifs_df
+)
+
+lapply(G523_motif_lt, function (x){
+  x$TF %>% unique() %>%length()
+}
+)
+
+# 2. Combine the list into one dataframe
+# .id = "condition" automatically creates a column using the list names
+combined_motifs <- G523_motif_lt %>%
+  bind_rows(.id = "condition") %>%
+  mutate(dataset = condition) %>%        # Create dataset column as a copy of condition
+  select(dataset, condition, everything()) # Reorder to match CSV structure (dataset, condition first)
+
+# View the result
+head(combined_motifs)
+
+# combine list into single table
+```
+```{r G523, eval = FALSE}
+# 1. Define the specific files
+G523_files <- c(
+  here("data","bulkATAC","2021-10-09_G523_N_BMP_vs_H_BMP_FDR_HOMER_motifs_bubbleplot.csv"),
+  here("data","bulkATAC","2021-04-17_G523_N_VEH_vs_H_VEH_FDR_HOMER_motifs_bubbleplot.csv"),
+here("data","bulkATAC","2021-10-10_2021-10-08_G523_N_VEH_vs_N_BMP_FDR_HOMER_motifs_bubbleplot.csv")
+)
+
+# 2. Define a processing function for these specific CSVs
+process_bubbleplot_csv <- function(path) {
+  fname <- basename(path)
+  
+  # Extract metadata from filename
+  c_line <- str_extract(fname, "G\\d{3}")
+  comp_name <- str_extract(fname, paste0("(?<=", c_line, "_).*(?=_FDR)"))
+  
+  read_csv(path, show_col_types = FALSE) %>%
+    mutate(
+      cell_line = c_line,
+      # STEP A: Create condition using the original 'dataset' column values
+      # We use str_remove on 'dataset' before it is modified
+      condition = str_remove(dataset, "^knownmotif_"),
+      
+      # STEP B: Now overwrite 'dataset' with the comparison name from the filename
+      dataset = comp_name,
+      
+      # Ensure numeric values are handled correctly
+      `% of targets` = as.character(`% of targets`),
+      `% of background` = as.character(`% of background`)
+    ) %>%
+    select(
+      cell_line, dataset, condition, Rank, TF, Motif, `p-value`, `log pvalue`, 
+      `q-value/FDR`, `% of targets`, `% of background`, 
+      `Fold Enrichment`, `log2(FE)`
+    )
+}
+
+# 3. Combine them into a single table
+G523_final_table <- G523_files %>%
+  map_dfr(process_bubbleplot_csv)
+
+# 4. Save or Inspect
+glimpse(G523_final_table)
+write_csv(G523_final_table, 
+          here("data","bulkATAC","2026-04-20_G523_pairwise_HOMER_motifs.csv"),
+                      col_names=TRUE)
+
+```
+
+## load bulk ATAC-seq: G361+G411 (n=2, all, normoxia vs hypoxia)
+```{r load GSC G361+G411 all normoxia vs hypoxia}
+# previously n=1
+# 2021-03-07_G361_G411_N_v_H_FDR_HOMER_motifs_bubbleplot.csv
+
+G361_G411_all_motifs_df <- read_csv(here("data",
+                                         "bulkATAC",
+                                         "2026-01-29_G361_G411_all_normoxia_vs_hypoxia_deseq2_block",
+                                         "combined_homer_results.csv"),
+                                          col_names=TRUE)
+
+G361_G411_all_motifs_H <- G361_G411_all_motifs_df %>%
+  filter(dataset == "hypoxia_enrich") # deseq2 was used in thesis
+
+G361_G411_all_motifs_N <- G361_G411_all_motifs_df %>%
+  filter(dataset == "normoxia_enrich") # deseq2 was used in thesis
+
+# 2. clean motifs again so it matches multiome, see G523 for clues how todo it
+
+```
+## load bulk ATAC-seq: G361 & G411 (n=2, pairwise)
+```{r load GSC G361+G411 pairwise}
+# library(tidyverse)
+# library(fs)
+# 
+# # --- 1. Updated Processing Function ---
+# # loads the knownResults.txt from folders
+# process_homer <- function(path, label) {
+#   read_tsv(path, show_col_types = FALSE) %>%
+#     mutate(
+#       dataset = label,
+#       # NEW: Extract the condition by removing the suffix
+#       # This looks for "_hypoxia" or "_normoxia" at the end of the string ($)
+#       condition = str_remove(dataset, "_(hypoxia|normoxia)$"),
+#       
+#       Rank = row_number(),
+#       TF = str_extract(`Motif Name`, "^[^(/]+"), 
+#       Motif = Consensus,
+#       `p-value` = `P-value`,
+#       `log pvalue` = `Log P-value`,
+#       `q-value/FDR` = `q-value (Benjamini)`,
+#       `% of targets` = `% of Target Sequences with Motif`,
+#       `% of background` = `% of Background Sequences with Motif`,
+#       target_num = parse_number(`% of targets`),
+#       bg_num = parse_number(`% of background`),
+#       `Fold Enrichment` = target_num / bg_num,
+#       `log2(FE)` = log2(`Fold Enrichment`)
+#     ) %>%
+#     select(
+#       dataset, condition, Rank, TF, Motif, `p-value`, `log pvalue`, 
+#       `q-value/FDR`, `% of targets`, `% of background`, 
+#       `Fold Enrichment`, `log2(FE)`
+#     )
+# }
+# 
+# # --- 2. Robust Path and Label Generation ---
+# base_path <- here("data","bulkATAC")
+# 
+# # Get folders and filter for the specific date/prefix
+# folders <- dir_ls(base_path, type = "directory", regexp = "2023-01-10_G")
+# 
+# # Create a flat vector of files with clean names
+# # Each name will look like: G361_N_72_vs_A_24_hypoxia
+# samplefiles <- folders %>%
+#   map(function(f) {
+#     # Extract the condition name from the folder (removing the date prefix)
+#     cond_name <- str_remove(basename(f), "^\\d{4}-\\d{2}-\\d{2}_")
+#     
+#     # Define the two file paths per folder
+#     paths <- c(
+#       path(f, "hypoxia_enrich", "knownResults.txt"),
+#       path(f, "normoxia_enrich", "knownResults.txt")
+#     )
+#     
+#     # Assign names to these paths for imap to use as the 'label'
+#     names(paths) <- c(paste0(cond_name, "_hypoxia_enrich"), paste0(cond_name, "_normoxia_enrich"))
+#     return(paths)
+#   }) %>%
+#   flatten_chr()
+# 
+# # Filter for existing files only
+# samplefiles <- samplefiles[file_exists(samplefiles)]
+# 
+# # --- 3. Run and Combine ---
+# final_table <- imap_dfr(samplefiles, ~process_homer(.x, .y))
+# 
+# # Check the first few rows
+# head(final_table)
+library(tidyverse)
+library(fs)
+
+# --- 1. Redefined Processing Function ---
+process_homer <- function(path, label) {
+  read_tsv(path, show_col_types = FALSE) %>%
+    mutate(
+      # 1. cell_line: Everything before the first underscore (e.g., G361)
+      cell_line = str_extract(label, "^[^_]+"),
+      
+      # 2. condition: The enrichment suffix (e.g., hypoxia_enrich)
+      condition = str_extract(label, "(hypoxia|normoxia)_enrich$"),
+      
+      # 3. dataset: The comparison part (e.g., G361_N_72_vs_A_24)
+      dataset = str_remove(label, "_(hypoxia|normoxia)_enrich$"),
+      
+      Rank = row_number(),
+      TF = str_extract(`Motif Name`, "^[^(/]+"), 
+      Motif = Consensus,
+      `p-value` = `P-value`,
+      `log pvalue` = `Log P-value`,
+      `q-value/FDR` = `q-value (Benjamini)`,
+      `% of targets` = `% of Target Sequences with Motif`,
+      `% of background` = `% of Background Sequences with Motif`,
+      
+      target_num = parse_number(`% of targets`),
+      bg_num = parse_number(`% of background`),
+      `Fold Enrichment` = target_num / bg_num,
+      `log2(FE)` = log2(`Fold Enrichment`)
+    ) %>%
+    # Reordered columns to start with your new metadata
+    select(
+      cell_line, dataset, condition, Rank, TF, Motif, `p-value`, `log pvalue`, 
+      `q-value/FDR`, `% of targets`, `% of background`, 
+      `Fold Enrichment`, `log2(FE)`
+    )
+}
+
+# --- 2. Updated File Path and Label Generation ---
+base_path <- "C:/Users/wuronald/WKLab Dropbox/Ronald Wu/_wouters lab/Data Ronald/scATAC-seq/data/bulkATAC"
+folders <- dir_ls(base_path, type = "directory", regexp = "2023-01-10_G")
+
+samplefiles <- folders %>%
+  map(function(f) {
+    # Remove date prefix to get the base comparison name (e.g., G361_N_72_vs_A_24)
+    comparison_name <- str_remove(basename(f), "^\\d{4}-\\d{2}-\\d{2}_")
+    
+    paths <- c(
+      path(f, "hypoxia_enrich", "knownResults.txt"),
+      path(f, "normoxia_enrich", "knownResults.txt")
+    )
+    
+    # Create labels that match your new decomposition logic
+    names(paths) <- c(
+      paste0(comparison_name, "_hypoxia_enrich"), 
+      paste0(comparison_name, "_normoxia_enrich")
+    )
+    return(paths)
+  }) %>%
+  flatten_chr()
+
+# Safety filter for existing files
+samplefiles <- samplefiles[file_exists(samplefiles)]
+
+# --- 3. Run and Combine ---
+final_table <- imap_dfr(samplefiles, ~process_homer(.x, .y))
+
+# View a summary of the new column structure
+glimpse(final_table)
+```
+### export G361/G411 pairwise homer motif csv
+```{r export G361/G411 pairwise homer motif csv, eval=FALSE}
+
+write_csv(final_table, 
+          here("data","bulkATAC","2026-04-19_G361_G411_RW492_RW555_pairwise_HOMER_motifs.csv"),
+                      col_names=TRUE)
+```
+
+## Define motif compare plotting functions
+```{r motif compare plotting functions}
 # from human multiome
 motifsUp_homer.df
 motifsDown_homer.df
@@ -1234,6 +1507,53 @@ read_csv(here("data","bulkATAC","2025_10-17_human_multiome_PIMOup_vs_PIMOdown_HO
 read_csv(here("data","bulkATAC","2025_12-08_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsDown.csv"),col_names=TRUE)
 ```
 Looks like the motifs enriched are similar but more significant in the new one. Slight variations in ranking too, at least for the top motifs.
+## export motifs for supplemental table
+```{r export motifs for supplemental table, eval = FALSE}
+# export the pairwise PIMO_up_status motifs (PIMOup_vs_PIMOdown)
+motifsUp_homer.df_cleaned <- homer_motif_cleaning(motifsUp_homer.df)
+motifsDown_homer.df_cleaned <- homer_motif_cleaning(motifsDown_homer.df)
+
+write_csv(
+  motifsUp_homer.df_cleaned,
+  here(
+    "data",
+    "human_multiome",
+    "motifEnrichment_homer_PIMO_up_status",
+    "motifsUp_PIMO_up_status_PIMOup_vs_PIMOdown_homer.csv"
+  )
+)
+
+write_csv(
+  motifsDown_homer.df_cleaned,
+  here(
+    "data",
+    "human_multiome",
+    "motifEnrichment_homer_PIMO_up_status",
+    "motifsDown_PIMO_up_status_PIMOup_vs_PIMOdown_homer.csv"
+  )
+)
+
+# EDA
+motifsUp_homer.df_cleaned$TF_cleaned %>% length # 332
+motifsUp_homer.df_cleaned$TF_fixed %>% unique %>% length # 324
+motifsUp_homer.df_cleaned$TF_cleaned %>% unique %>% length # 320
+
+# what the duplicates? 8 after fixing, 12 after cleaning
+motifsUp_homer.df_cleaned$TF_cleaned[duplicated(motifsUp_homer.df_cleaned$TF_cleaned)]
+
+```
+1. FOXA1 (before merging: FOXA1.Forkhead_88, FOXA1.Forkhead_87)
+2. GATA-Zf
+3. GATA3-Zf
+4. GRE
+5. HRE
+6. Nr5a2
+7. OCT:OCT
+8. Pax7-Paired
+9. RAR:RXR
+10. STAT6
+11. c-Myc
+12. p53
 
 # Motif Compare: Mouse Multiome
 Here we load the significant motifs (padj < 0.05) from pairwise comparison of homer motifs for PIMO_up_status (PIMOup vs PIMOdown).
@@ -1414,9 +1734,6 @@ grid.draw()
 dev.off()
 ```
 
-
-
-
 # Motif Compare: Human Multiome k3_program scPOS-MP
 ```{r}
 # SE objects from ArchR output
@@ -1426,51 +1743,6 @@ k3_motifsDown
 
 # EDA on SE object
 assay(markersPeak_k3_program)
-
-# updated motifSEtoDF function
-motifSEtoDF <- function(motifs) {
-  # Extract the underlying matrix from the SummarizedExperiment object.
-  # as.matrix() ensures it's a standard dense matrix (this safely handles 
-  # underlying sparse dgCMatrix assays from ArchR/Signac)
-  motif_mat <- as.matrix(assay(motifs))
-  
-  # Convert to a data frame and add rownames as a column using tibble
-  df_base <- motif_mat %>%
-    as.data.frame() %>%
-    rownames_to_column("TF")
-  
-  # Check the matrix columns using ncol()
-  if (ncol(motif_mat) > 1) {
-    print("More than 1 discrete cell grouping within this groupBy")
-    
-    # Use tidyr, dplyr, and stringr for pivoting, ranking, and cleaning
-    df <- df_base %>%
-      pivot_longer(cols = -TF, names_to = "group", values_to = "mlog10Padj") %>%
-      group_by(group) %>%
-      mutate(rank = row_number(desc(mlog10Padj))) %>%
-      ungroup() %>%
-      arrange(group, rank) %>%
-      mutate(
-        TF_fixed = str_remove(TF, "_.*"),
-        TF_family = str_remove(TF_fixed, ".*\\.")
-      )
-      
-    return(df)
-    
-  } else {
-    # Single grouping condition
-    df <- df_base %>%
-      rename(mlog10Padj = 2) %>%
-      mutate(rank = row_number(desc(mlog10Padj))) %>%
-      arrange(rank) %>%
-      mutate(
-        TF_fixed = str_remove(TF, "_.*"),
-        TF_family = str_remove(TF_fixed, ".*\\.")
-      )
-      
-    return(df)
-  }
-}
 
 # Convert motifs SE to df
 k3_motifsUp.df <- motifSEtoDF(k3_motifsUp)
@@ -1517,7 +1789,7 @@ common_OG_vs_k3_motifsDown <-
 
 ```
 ## export PDF
-```{r export pdf, eval = FALSE}
+```{r export pdf 1, eval = FALSE}
 pdf(here("Plots","2026-03-09_human_multiome_k3_program_motifs_homer_motif_ranking.pdf"))
 
 # default
@@ -1630,6 +1902,271 @@ write_csv(
 
 ```
 
+
+# Motif Compare: Human Multiome nomura (meta_module) 
+```{r}
+# SE objects from ArchR output
+
+nomura_motifsUp
+nomura_motifsDown
+
+# EDA on SE object
+assay(nomura_motifsUp)
+
+# Convert motifs SE to df
+nomura_motifsUp.df <- motifSEtoDF(nomura_motifsUp)
+nomura_motifsDown.df <- motifSEtoDF(nomura_motifsDown)
+
+nomura_motifsUp.df
+nomura_motifsDown.df
+
+# additional homer motifs cleaning so motifs match b/w multiome and bulk ATAC 
+nomura_motifsUp.df_cleaned <- homer_motif_cleaning(nomura_motifsUp.df)
+nomura_motifsDown.df_cleaned <- homer_motif_cleaning(nomura_motifsDown.df)
+
+# Plotting default (eg. AC.like)
+nomura_motifsUp.df_cleaned %>% 
+    filter(group == "AC.like") %>%  
+    plotMotifEnrichments_final() +
+  ggtitle("Human Multiome: motifsUp nomura meta_module: AC.like",
+          subtitle = "Top 25 motifs padj<0.05")
+```
+## export PDF
+```{r export pdf, eval = FALSE}
+# default
+# 1. Get a vector of unique groups
+groups <- unique(nomura_motifsUp.df_cleaned$group)
+
+# 2. Iterate and create a list of plots
+all_plots_up <- groups %>% set_names() %>% map(function(g) {
+  
+  nomura_motifsUp.df_cleaned %>% 
+    filter(group == g) %>%  
+    plotMotifEnrichments_final() +
+    labs(
+      title = paste("Human Multiome: motifsUp nomura meta_module:", g),
+      subtitle = "Top 25 motifs padj<0.05"
+    )
+})
+all_plots_down <- groups %>% set_names() %>% map(function(g) {
+    nomura_motifsDown.df_cleaned %>% 
+    filter(group == g) %>%  
+    plotMotifEnrichments_final() +
+    labs(
+      title = paste("Human Multiome: motifsDown nomura meta_module:", g),
+      subtitle = "Top 25 motifs padj<0.05"
+    )
+})
+
+pdf(here("Plots","2026-03-19_human_multiome_nomura_meta_module_motifs_homer_motif_ranking.pdf"))
+all_plots_up
+all_plots_down
+dev.off()
+
+
+```
+## export motifs for supplemental table
+```{r export motifs for supplement 2, eval = FALSE}
+
+write_csv(
+  nomura_motifsUp.df_cleaned,
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_nomura",
+    "motifEnrichment_homer_meta_module",
+    "motifsUp_meta_module_homer.csv"
+  )
+)
+write_csv(
+  nomura_motifsDown.df_cleaned,
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_nomura",
+    "motifEnrichment_homer_meta_module",
+    "motifsDown_meta_module_homer.csv"
+  )
+)
+
+```
+
+```{r nomura motifs EDA}
+# here we check the number of HOMER motifs for nomura, and number of unique motifs
+nomura_motifsUp.df_cleaned$TF %>% unique() %>% length
+nomura_motifsUp.df_cleaned$TF_cleaned %>% unique() %>% length
+
+```
+So HOMER has 332 motifs examined, but after we cleaned the motif naming, only 320 remain. There were 12 pairs of motifs that were consolidated as the following:
+1. FOXA1 (before merging: FOXA1.Forkhead_88, FOXA1.Forkhead_87)
+2. GATA-Zf
+3. GATA3-Zf
+4. GRE
+5. HRE
+6. Nr5a2
+7. OCT:OCT
+8. Pax7-Paired
+9. RAR:RXR
+10. STAT6
+11. c-Myc
+12. p53
+
+# Motif Compare heatmap:
+## load homer motifs from multiome
+```{r motif compare heatmap}
+# Load required libraries
+library(circlize)
+library(RColorBrewer) # For automatic color generation
+# Load the datasets
+meta_module <- read.csv(
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_nomura",
+    "motifEnrichment_homer_meta_module",
+    "motifsUp_meta_module_homer.csv"
+  )
+)
+
+k3_program <- read.csv(
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_k3_program",
+    "motifEnrichment_homer_k3_program",
+    "motifsUp_k3program_homer.csv"
+  )
+)
+
+# 1. Scalable Data Loading
+# Create a named list of your file paths
+files <- list(
+  "MetaModule" =  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_nomura",
+    "motifEnrichment_homer_meta_module",
+    "motifsUp_meta_module_homer.csv"
+  ),
+  "K3Program"  =  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_k3_program",
+    "motifEnrichment_homer_k3_program",
+    "motifsUp_k3program_homer.csv"
+  )
+  # Add more here: "NewDataset" = "path/to/file.csv"
+)
+```
+
+```{r motif compare heatmap continued}
+
+df_list <- lapply(files, read.csv)
+
+prepare_multi_data <- function(data_list) {
+  bind_rows(data_list, .id = "origin") %>%
+    group_by(TF_cleaned, group, origin) %>%
+    summarise(mlog10Padj = max(mlog10Padj, na.rm = TRUE), .groups = "drop")
+}
+
+combined_df <- prepare_multi_data(df_list)
+
+# 2. Updated Plotting Function with Printing Feature
+plot_tf_heatmap <- function(data, 
+                            groups_to_include = NULL, 
+                            top_n_tfs = 50, 
+                            normalize_to_max = TRUE,
+                            filter_by_padj = TRUE,      
+                            min_mlog10padj = 1.30103) {     
+  
+  # Step A: Filter for user-specified groups
+  plot_data <- data
+  if (!is.null(groups_to_include)) {
+    plot_data <- plot_data %>% filter(group %in% groups_to_include)
+  }
+  
+  # Step B: Pivot to wide matrix
+  heatmap_mat <- plot_data %>%
+    select(TF_cleaned, group, mlog10Padj) %>%
+    pivot_wider(names_from = group, values_from = mlog10Padj, values_fill = 0) %>%
+    column_to_rownames("TF_cleaned") %>%
+    as.matrix()
+  
+  # Step C: Significance Filtering
+  if (filter_by_padj) {
+    keep_rows <- apply(heatmap_mat, 1, function(x) any(x >= min_mlog10padj))
+    heatmap_mat <- heatmap_mat[keep_rows, , drop = FALSE]
+    
+    if (nrow(heatmap_mat) == 0) {
+      stop(paste("No motifs passed the threshold of -log10Padj >=", min_mlog10padj))
+    }
+  }
+  
+  # Step D: Normalization (Max Scaling to 100)
+  if (normalize_to_max) {
+    heatmap_mat_display <- apply(heatmap_mat, 2, function(x) {
+      m <- max(x, na.rm = TRUE)
+      if(m == 0) return(x)
+      return((x / m) * 100)
+    })
+    col_fun <- colorRamp2(c(0, 100), c("white", "red"))
+    legend_label <- "Relative Enrichment (0-100)"
+  } else {
+    heatmap_mat_display <- heatmap_mat
+    col_fun <- colorRamp2(c(0, max(heatmap_mat)), c("white", "red"))
+    legend_label <- "-log10(Padj)"
+  }
+  
+  # Step E: Select Top N TFs
+  importance <- apply(heatmap_mat_display, 1, max)
+  top_tfs <- names(sort(importance, decreasing = TRUE))[1:min(top_n_tfs, nrow(heatmap_mat_display))]
+  heatmap_mat_display <- heatmap_mat_display[top_tfs, , drop = FALSE]
+  
+  # --- NEW: Print Summary to Console ---
+  cat("\n--- Heatmap Summary ---\n")
+  cat("Number of motifs displayed:", nrow(heatmap_mat_display), "\n")
+  cat("Motifs included:\n")
+  print(rownames(heatmap_mat_display))
+  cat("------------------------\n\n")
+  # -------------------------------------
+  
+  # Step F: Dynamic Column Annotation
+  group_origin_map <- plot_data %>% select(group, origin) %>% distinct() %>% deframe()
+  unique_origins <- unique(plot_data$origin)
+  origin_colors <- setNames(brewer.pal(max(3, length(unique_origins)), "Set1")[1:length(unique_origins)], 
+                            unique_origins)
+  
+  col_ann <- columnAnnotation(
+    Dataset = group_origin_map[colnames(heatmap_mat_display)],
+    col = list(Dataset = origin_colors),
+    show_annotation_name = TRUE
+  )
+  
+  # Step G: Generate Heatmap
+  Heatmap(heatmap_mat_display,
+          name = legend_label,
+          col = col_fun,
+          top_annotation = col_ann,
+          cluster_columns = TRUE,
+          cluster_rows = TRUE,
+          row_names_gp = gpar(fontsize = 8),
+          column_title = paste0("Top TFs (Filter: ", 
+                                ifelse(filter_by_padj, paste0("-log10P >= ", min_mlog10padj), "None"), ")"))
+}
+
+# 3. Usage Examples:
+
+# Scenario 1. Default significance filter (mlog10padj > 1.30103) with specific groups
+selected <- c("AC.like", "MES.like", "Hypoxia","program_1", "program_2", "program_3")
+ht1 <- plot_tf_heatmap(combined_df, groups_to_include = selected, filter_by_padj = TRUE)
+draw(ht1)
+
+# Scenario 2: Strict filter (Only show TFs where at least one sample is highly significant)
+ht2 <- plot_tf_heatmap(combined_df, groups_to_include = selected, filter_by_padj = TRUE, min_mlog10padj = 20)
+draw(ht2)
+```
+## export PDF
+
 # check h5 file integrity
 ```{r check h5 files}
 library(Seurat)
@@ -1674,7 +2211,453 @@ nrow(counts3) # 98740
 counts2
 counts3
 ```
+# Motif compare GSC pairwise bubble plot dot plot
 
+```{r GSC pairwise bubbleplot dotplot}
+library(tidyverse)
+
+plot_homer_dots_binned <- function(df, fdr_cutoff = 0.05, top_n_rank = 60) {
+  
+  # 1. Pre-process and categorize significance levels
+  plot_data <- df %>%
+    filter(`q-value/FDR` < fdr_cutoff) %>%
+    filter(Rank <= top_n_rank) %>%
+    mutate(
+      # Categorize FDR into discrete bins
+      fdr_bin = case_when(
+        `q-value/FDR` < 0.001 ~ "< 0.001",
+        `q-value/FDR` >= 0.001 & `q-value/FDR` < 0.01 ~ "0.001 - 0.01",
+        `q-value/FDR` >= 0.01  & `q-value/FDR` < 0.05 ~ "0.01 - 0.05",
+        TRUE ~ "> 0.05"
+      ),
+      # Set factor levels to ensure the legend displays in the correct order
+      fdr_bin = factor(fdr_bin, levels = c("< 0.001", "0.001 - 0.01", "0.01 - 0.05")),
+      
+      # Ensure TF is a factor sorted by its average Rank for a cleaner plot
+      #TF = fct_reorder(TF, Rank, .fun = mean, .desc = TRUE)
+    )
+
+  # 2. Generate the plot
+  ggplot(plot_data, aes(x = dataset, y = TF)) +
+    geom_point(aes(size = fdr_bin, color = `Fold Enrichment`)) +
+    # Define custom sizes for the bins (Smallest bin = size 2, Largest = size 6)
+    scale_size_manual(
+      values = c("< 0.001" = 6, "0.001 - 0.01" = 3.5, "0.01 - 0.05" = 1.5),
+      name = "q-value/FDR"
+    ) +
+    # Color scale (Magma highlights high enrichment well)
+    scale_color_viridis_c(option = "magma", direction = -1) +
+    theme_bw() +
+    labs(
+      title = paste("Top", top_n_rank, "Motifs"),
+      subtitle = paste("Filtered for Rank <=", top_n_rank, "and FDR <", fdr_cutoff),
+      x = "Dataset",
+      y = "Transcription Factor"
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      axis.text.y = element_text(size = 7),
+      panel.grid.major = element_line(color = "grey95"),
+      legend.key.height = unit(0.5, "cm")
+    )
+}
+
+# --- To use this function: ---
+final_plot <- plot_homer_dots_binned(final_table)
+final_plot
+print(final_plot)
+
+# --- Example Usage ---
+# Assuming your table is loaded as 'final_table'
+pdf(here("data","bulkATAC",
+         "2026-04-19_G361_G411_RW492_RW555_pairwise_HOMER_motifs_bubbleplot.pdf"), 
+    width = 10, height = 15)
+plot_homer_dots_binned(final_table, fdr_cutoff = 0.05, top_n_rank = 10)
+plot_homer_dots_binned(final_table, fdr_cutoff = 0.05, top_n_rank = 25)
+plot_homer_dots_binned(final_table, fdr_cutoff = 0.05, top_n_rank = 60)
+dev.off()
+```
+
+# Binary Heatmap for GSC motifs:
+```{r binary heatmap for GSC motifs, eval = FALSE}
+library(tidyverse)
+library(ComplexHeatmap)
+library(circlize)
+
+plot_homer_heatmap_annotated <- function(df, fdr_cutoff = 0.05, top_n_rank = 60) {
+  
+  # 1. Identify passing TFs
+  passing_tfs <- df %>%
+    filter(`q-value/FDR` < fdr_cutoff, Rank <= top_n_rank) %>%
+    pull(TF) %>%
+    unique()
+
+  # 2. Prepare the matrix
+  heatmap_mat <- df %>%
+    filter(TF %in% passing_tfs) %>%
+    mutate(pass = if_else(`q-value/FDR` < fdr_cutoff & Rank <= top_n_rank, 1, 0)) %>%
+    group_by(TF, dataset) %>%
+    summarize(pass = max(pass, na.rm = TRUE), .groups = "drop") %>%
+    pivot_wider(names_from = dataset, values_from = pass, values_fill = 0) %>%
+    column_to_rownames("TF") %>%
+    as.matrix()
+
+  # 3. Decompose dataset names for Metadata
+  # This creates a dataframe where each row matches a column in our heatmap
+  col_metadata <- data.frame(dataset_full = colnames(heatmap_mat)) %>%
+    mutate(
+      GSC_line = str_extract(dataset_full, "^[^_]+"),
+      enrichment = str_extract(dataset_full, "hypoxia_enrich|normoxia_enrich"),
+      # Extract the middle part as the condition
+      condition = str_replace(dataset_full, paste0("^", GSC_line, "_"), ""),
+      condition = str_replace(condition, paste0("_", enrichment, "$"), "")
+    ) %>%
+    column_to_rownames("dataset_full")
+
+  # 4. Create Heatmap Annotations
+  # We define distinct colors for the different metadata categories
+  ha <- HeatmapAnnotation(
+    GSC_line = col_metadata$GSC_line,
+    Condition = col_metadata$condition,
+    Enrichment = col_metadata$enrichment,
+    col = list(
+      GSC_line = c("G361" = "#E41A1C", "G411" = "#377EB8"),
+      Enrichment = c("hypoxia_enrich" = "black", "normoxia_enrich" = "grey80"),
+      Condition = c("N_72_vs_A_24" = "#4DAF4A", "N_72_vs_H_24" = "#984EA3", 
+                    "N_72_vs_H_72" = "#FF7F00")
+    ),
+    annotation_name_side = "left"
+  )
+
+  # 5. Draw the Heatmap
+  Heatmap(heatmap_mat, 
+          name = "Enriched", 
+          col = c("0" = "white", "1" = "firebrick"),
+          top_annotation = ha, # Add the metadata here
+          rect_gp = gpar(col = "grey95", lwd = 0.5),
+          
+          #column_title = "HOMER Motif Enrichment Pattern",
+          column_title = paste0("FDR< ", fdr_cutoff, " and Top ",top_n_rank, " motifs"),
+          cluster_rows = TRUE, 
+          cluster_columns = TRUE,
+          show_column_names = FALSE, # Hidden because annotations explain the columns
+          
+          row_names_gp = gpar(fontsize = 7),
+          column_names_gp = gpar(fontsize = 8))
+}
+
+# --- Usage ---
+# hm <- plot_homer_heatmap_annotated(final_table)
+# draw(hm, merge_legend = TRUE)
+
+pdf(here("data","bulkATAC",
+         "2026-04-19_G361_G411_RW492_RW555_pairwise_HOMER_motifs_binaryHeatmap.pdf"), 
+    width = 10, height = 15)
+hm <- plot_homer_heatmap_annotated(final_table, fdr_cutoff=0.05, top_n_rank = 10)
+draw(hm, merge_legend = TRUE)
+hm <- plot_homer_heatmap_annotated(final_table, fdr_cutoff=0.05, top_n_rank = 25)
+draw(hm, merge_legend = TRUE)
+hm <- plot_homer_heatmap_annotated(final_table)
+draw(hm, merge_legend = TRUE)
+
+
+hm <- plot_homer_heatmap_annotated(final_table, fdr_cutoff=0.005, top_n_rank = 25)
+draw(hm, merge_legend = TRUE)
+dev.off()
+
+# for all n=2, normoxia vs hypoxia; non-pairwise
+library(tidyverse)
+library(ComplexHeatmap)
+
+# This function works on both pairwise and all analysis
+plot_homer_heatmap_flexible <- function(df, 
+                                        fdr_cutoff = 0.05, 
+                                        top_n_rank = 60, 
+                                        annotation_colors = NULL) {
+  
+  # 1. Identify passing TFs
+  passing_tfs <- df %>%
+    filter(`q-value/FDR` < fdr_cutoff, Rank <= top_n_rank) %>%
+    pull(TF) %>%
+    unique()
+
+  if(length(passing_tfs) == 0) return(NULL)
+
+  # 2. Prepare the binary matrix
+  heatmap_mat <- df %>%
+    filter(TF %in% passing_tfs) %>%
+    mutate(pass = if_else(`q-value/FDR` < fdr_cutoff & Rank <= top_n_rank, 1, 0)) %>%
+    group_by(TF, dataset) %>%
+    summarize(pass = max(pass, na.rm = TRUE), .groups = "drop") %>%
+    pivot_wider(names_from = dataset, values_from = pass, values_fill = 0) %>%
+    column_to_rownames("TF") %>%
+    as.matrix()
+
+  # 3. Decomposition Logic
+  col_metadata <- data.frame(dataset_full = colnames(heatmap_mat)) %>%
+    mutate(
+      enrichment = str_extract(dataset_full, "hypoxia_enrich|normoxia_enrich"),
+      remaining = str_remove(dataset_full, paste0("_?", enrichment)),
+      GSC_line = if_else(str_detect(remaining, "_"), 
+                         str_extract(remaining, "^[^_]+"), 
+                         NA_character_),
+      condition = if_else(!is.na(GSC_line), 
+                          str_remove(remaining, paste0("^", GSC_line, "_?")), 
+                          if_else(remaining == "", NA_character_, remaining))
+    ) %>%
+    mutate(across(everything(), ~replace_na(.x, "N/A"))) %>%
+    column_to_rownames("dataset_full")
+
+  # Select existing annotation columns
+  anno_df <- col_metadata %>% select(GSC_line, condition, enrichment)
+  anno_df <- anno_df[, colSums(anno_df == "N/A") < nrow(anno_df), drop = FALSE]
+
+  # 4. Create Annotations with Custom Colors
+  # If annotation_colors is provided, HeatmapAnnotation will use it.
+  # If it's NULL, it will use default random colors.
+  ha <- NULL
+  if(ncol(anno_df) > 0) {
+    ha <- HeatmapAnnotation(
+      df = anno_df, 
+      col = annotation_colors, # This is where the magic happens
+      annotation_name_side = "left"
+    )
+  }
+
+  # 5. Draw Heatmap
+  Heatmap(heatmap_mat, 
+          name = "Enriched", 
+          col = c("0" = "white", "1" = "firebrick"),
+          top_annotation = ha,
+          rect_gp = gpar(col = "grey95", lwd = 0.5),
+          column_title = paste0("FDR< ", fdr_cutoff, " and Top ",top_n_rank, " motifs"),
+          cluster_rows = TRUE, 
+          cluster_columns = ncol(heatmap_mat) > 1,
+          row_names_gp = gpar(fontsize = 6))
+}
+# Define your preferred color schemes
+my_colors <- list(
+  GSC_line = c(
+    "G361" = "#E41A1C", 
+    "G411" = "#377EB8", 
+    "N/A"  = "grey90"
+  ),
+  enrichment = c(
+    "hypoxia_enrich" = "#000000",   # Black for hypoxia
+    "normoxia_enrich" = "#D9D9D9"  # Light grey for normoxia
+  ),
+  condition = c(
+    "N_72_vs_A_24" = "#4DAF4A", 
+    "N_72_vs_H_24" = "#984EA3", 
+    "N_72_vs_H_72" = "#FF7F00",
+    "N/A"          = "white"
+  )
+)
+
+# --- Usage with your new CSV ---
+# df_combined <- read_csv("combined_homer_results.csv")
+# hm <- plot_homer_heatmap_flexible(df_combined)
+# draw(hm)
+
+pdf(here("data","bulkATAC",
+         "2026-04-19_G361_G411_RW492_RW555_all_normoxia_vs_hypoxia_HOMER_motifs_binaryHeatmap.pdf"), 
+    width = 14, height = 10)
+
+plot_homer_heatmap_flexible(G361_G411_all_motifs_df, fdr_cutoff=0.05, top_n_rank = 10, annotation_colors = my_colors)
+plot_homer_heatmap_flexible(G361_G411_all_motifs_df, fdr_cutoff=0.05, top_n_rank = 25, annotation_colors = my_colors)
+plot_homer_heatmap_flexible(G361_G411_all_motifs_df, fdr_cutoff=0.05, top_n_rank = 60, annotation_colors = my_colors)
+plot_homer_heatmap_flexible(G361_G411_all_motifs_df, fdr_cutoff=0.005, top_n_rank = 25, annotation_colors = my_colors)
+
+dev.off()
+```
+## testing new homer heatmap function
+```{r new homer heatmap function, eval = FALSE}
+library(tidyverse)
+library(ComplexHeatmap)
+
+my_colors <- list(
+  # 1. Cell Lines: Use distinct bold colors
+  cell_line = c(
+    "G361" = "cyan",   # teal
+    "G411" = "orange",   # orange
+    "G523" = "#4DAF4A",   # Green
+    "G521" = "#984EA3",   # Purple (adding a buffer for future lines)
+    "N/A"  = "grey90"
+  ),
+  
+condition = c(
+    # --- Hypoxia (Cool Blues) ---
+    "hypoxia_enrich"  = "#081d58", # Midnight Blue
+    "H_VEH_edgeR"     = "#084594", # Deep Blue
+    "H_VEH_deseq2"    = "#2171b5", # Medium Blue
+    "H_BMP_edgeR"     = "#4292c6", # Steel Blue
+    "H_BMP_deseq2"    = "#6baed6", # Sky Blue
+    
+    # --- Normoxia (Warm Reds/Oranges) ---
+    "normoxia_enrich" = "#fff5f0", # Warm Off-white
+    "N_VEH_edgeR"     = "#99000d", # Blood Red
+    "N_VEH_deseq2"    = "#cb181d", # Bright Red
+    "N_BMP_edgeR"     = "#ef3b2c", # Orange-Red
+    "N_BMP_deseq2"    = "#fb6a4a", # Coral/Salmon
+    
+    "N/A"             = "white"
+  ),
+  
+  # 3. Dataset (Specific Comparisons)
+  dataset = c(
+    # 2023 Comparisons
+    "G361_N_72_vs_A_24" = "#8DD3C7",
+    "G361_N_72_vs_H_24" = "#FFFFB3",
+    "G361_N_72_vs_H_72" = "#BEBADA",
+    "G411_N_72_vs_A_24" = "#80B1D3",
+    "G411_N_72_vs_H_24" = "#FDB462",
+    "G411_N_72_vs_H_72" = "#B3DE69",
+    
+    # 2021 Comparisons
+    "N_VEH_vs_H_VEH"    = "#FCCDE5",
+    "N_BMP_vs_H_BMP"    = "#D9D9D9",
+    "N_VEH_vs_N_BMP"    = "#BC80BD",
+    "N/A"               = "white"
+  )
+)
+
+plot_homer_heatmap <- function(df, 
+                               fdr_cutoff = 0.05, 
+                               top_n_rank = 60, 
+                               annotation_colors = NULL) {
+  
+  # 1. Identify and Print passing TFs
+  passing_tfs <- df %>%
+    filter(`q-value/FDR` < fdr_cutoff, Rank <= top_n_rank) %>%
+    pull(TF) %>%
+    unique() %>%
+    sort() # Alphabetical sorting for the console printout
+
+  if(length(passing_tfs) == 0) {
+    message("No motifs passed the thresholds.")
+    return(NULL)
+  }
+  
+  # Print the list to the console
+  cat("--- Motifs Passing Thresholds ---\n")
+  cat("FDR <", fdr_cutoff, "| Rank <=", top_n_rank, "\n")
+  cat("Total TFs:", length(passing_tfs), "\n")
+  cat(paste(passing_tfs, collapse = ", "), "\n")
+  cat("---------------------------------\n\n")
+
+  # 2. Build the binary matrix
+  df_matrix <- df %>%
+    filter(TF %in% passing_tfs) %>%
+    mutate(
+      sample_id = paste(cell_line, dataset, condition, sep = "|"),
+      pass = if_else(`q-value/FDR` < fdr_cutoff & Rank <= top_n_rank, 1, 0)
+    ) %>%
+    group_by(TF, sample_id) %>%
+    summarize(pass = max(pass, na.rm = TRUE), .groups = "drop") %>%
+    pivot_wider(names_from = sample_id, values_from = pass, values_fill = 0) %>%
+    column_to_rownames("TF") %>%
+    as.matrix()
+
+  # 3. Extract Metadata for Column Annotations
+  col_metadata <- data.frame(sample_id = colnames(df_matrix)) %>%
+    separate(sample_id, 
+             into = c("cell_line", "dataset", "condition"), 
+             sep = "\\|", 
+             remove = FALSE) %>%
+    column_to_rownames("sample_id")
+
+  # 4. Create Heatmap Annotation
+  ha_cols <- annotation_colors[names(annotation_colors) %in% colnames(col_metadata)]
+  
+  ha <- HeatmapAnnotation(
+    df = col_metadata, 
+    col = ha_cols,
+    annotation_name_side = "left"
+  )
+
+  # 5. Render Heatmap with Dynamic Title
+  Heatmap(df_matrix, 
+          name = "Enriched", 
+          col = c("0" = "white", "1" = "firebrick"),
+          top_annotation = ha,
+          rect_gp = gpar(col = "grey95", lwd = 0.5),
+          
+          # Dynamic Title including thresholds
+          column_title = paste0("HOMER Motif Enrichment Pattern\n(FDR < ", 
+                                fdr_cutoff, ", Rank <= ", top_n_rank, ")"),
+          
+          cluster_rows = TRUE, 
+          cluster_columns = TRUE,
+          show_column_names = FALSE,
+          row_names_gp = gpar(fontsize = 8))
+}
+
+# example useage:
+
+# 1. Use with your original experiment data
+hm_detailed <- plot_homer_heatmap(final_table, annotation_colors = my_colors)
+draw(hm_detailed)
+
+# 2. Use with your 2021 G523 CSV data
+hm_2021 <- plot_homer_heatmap(G523_final_table, annotation_colors = my_colors)
+draw(hm_2021)
+
+# 3. Use with stricter filters
+hm_strict <- plot_homer_heatmap(final_table, fdr_cutoff = 0.01, top_n_rank = 10,
+                                annotation_colors = my_colors)
+draw(hm_strict)
+```
+
+## plot and export binary heatmaps
+```{r plot and export binary heatmaps, eval = FALSE}
+pdf(here("data","bulkATAC",
+         "2026-04-20_G361_G411_G523_HOMER_motifs_binaryHeatmap.pdf"), 
+    width = 10, height = 14)
+# G361 and G411
+plot_homer_heatmap(final_table, fdr_cutoff = 0.05, top_n_rank = 10,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(final_table, fdr_cutoff = 0.05, top_n_rank = 25,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(final_table, fdr_cutoff = 0.05, top_n_rank = 60,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(final_table, fdr_cutoff = 0.005, top_n_rank = 10,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(final_table, fdr_cutoff = 0.005, top_n_rank = 25,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(final_table, fdr_cutoff = 0.005, top_n_rank = 60,
+                                annotation_colors = my_colors)
+# G523 with deseq2 and edgeR
+plot_homer_heatmap(G523_final_table, fdr_cutoff = 0.05, top_n_rank = 10,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_final_table, fdr_cutoff = 0.05, top_n_rank = 25,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_final_table, fdr_cutoff = 0.05, top_n_rank = 60,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_final_table, fdr_cutoff = 0.005, top_n_rank = 10,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_final_table, fdr_cutoff = 0.005, top_n_rank = 25,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_final_table, fdr_cutoff = 0.005, top_n_rank = 60,
+                                annotation_colors = my_colors)
+
+# G523 with edgeR only (used in supplemental table)
+G523_filtered <- G523_final_table %>%
+  filter(!str_detect(condition, "deseq2"))
+plot_homer_heatmap(G523_filtered, fdr_cutoff = 0.05, top_n_rank = 10,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_filtered, fdr_cutoff = 0.05, top_n_rank = 25,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_filtered, fdr_cutoff = 0.05, top_n_rank = 60,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_filtered, fdr_cutoff = 0.005, top_n_rank = 10,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_filtered, fdr_cutoff = 0.005, top_n_rank = 25,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_filtered, fdr_cutoff = 0.005, top_n_rank = 60,
+                                annotation_colors = my_colors)
+
+dev.off()
+```
 # ChromVar Positive-TF Regulators Plot
 ```{r chromva positive TF regulators plot}
 class(chromVarDev_pos_TF_reg)
