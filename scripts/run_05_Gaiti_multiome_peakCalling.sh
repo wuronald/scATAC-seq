@@ -77,6 +77,9 @@ groupBy_list <- c("PIMO_up_status","PIMO_Region","Region.annotation")
 
 print(paste("GroupBy list:", paste(groupBy_list, collapse = ", ")))
 
+# Initialise list to store one proj_hyp2 per groupBy for use in pairwise tests below
+proj_hyp2_list <- list()
+
 for (groupBy in groupBy_list) {
   print(paste("Processing groupBy:", groupBy))
 
@@ -155,9 +158,16 @@ print(paste("Saved markersPeaks GR as .rds for", groupBy))
 markersPeaks_GR <- getMarkers(markersPeaks, cutOff = "FDR <=  1 & abs(Log2FC) >= 0", returnGR = TRUE)
 saveRDS(markersPeaks_GR, file = paste0("Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/markersPeaks_GR_", groupBy, ".rds"))
 
+  # Store proj_hyp2 (with its PeakMatrix built on this groupBy) for pairwise tests below
+  proj_hyp2_list[[groupBy]] <- proj_hyp2
+
 }
 
-# pairwise test between PIMO_Region groups: 
+# pairwise test between PIMO_Region groups:
+# Reload the project whose peak set was built on PIMO_Region
+print("Loading PIMO_Region proj_hyp2 for pairwise tests")
+proj_hyp2 <- proj_hyp2_list[["PIMO_Region"]]
+
 # 1. Within PIMOup EB vs TC
 print("Pairwise test between PIMO_Region groups: PIMOup_EB vs PIMOup_TC")
 markerTest <- getMarkerFeatures(
@@ -263,6 +273,10 @@ print("Number of markerTest peaks identified per group:")
 print(sapply(markerTest_GR, length))
 
 # pairwise test between Region.annotation groups:
+# Reload the project whose peak set was built on Region.annotation
+print("Loading Region.annotation proj_hyp2 for pairwise tests")
+proj_hyp2 <- proj_hyp2_list[["Region.annotation"]]
+
 # 1. EB vs TC
 print("Pairwise test between Region.annotation groups: EB vs TC") 
 markerTest <- getMarkerFeatures(
