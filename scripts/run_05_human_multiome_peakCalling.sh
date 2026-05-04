@@ -27,6 +27,7 @@
 #   sbatch run_05_human_multiome_peakCalling.sh
 #   sbatch --export=ALL,SKIP_SUBSET=true,ARCHR_PROJECT=human_multiome_hmmp_k3_program scripts/run_05_human_multiome_peakCalling.sh
 #   sbatch --export=ALL,ARCHR_PROJECT=human_multiome_hmmp_k3_program,SKIP_SUBSET=true,SUBSET_OUTDIR=human_multiome_hmmp_k3_program_peak,GROUP_BY_COLS=k3_program scripts/run_05_human_multiome_peakCalling.sh
+#   sbatch --export=ALL,ARCHR_PROJECT=human_multiome_hmmp_nomura,SKIP_SUBSET=true,SUBSET_OUTDIR=human_multiome_hmmp_nomura_peak,GROUP_BY_COLS=meta_module scripts/run_05_human_multiome_peakCalling.sh
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ─── Parameters (set via --export at sbatch submission) ───────────────────────
