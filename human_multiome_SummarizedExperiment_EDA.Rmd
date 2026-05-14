@@ -12,7 +12,10 @@ Here we explore the SummarizedExperiment object output from peak calling script 
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install("ComplexHeatmap")
+
+#if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+
+BiocManager::install(c("SummarizedExperiment", "pheatmap", "tidyverse", "here", "ggrepel", "ComplexHeatmap"))
 ```
 # Load Libraries
 ```{r load libraries}
@@ -931,7 +934,10 @@ glimpse(G523_final_table)
 write_csv(G523_final_table, 
           here("data","bulkATAC","2026-04-20_G523_pairwise_HOMER_motifs.csv"),
                       col_names=TRUE)
-
+# reload
+G523_final_table <-
+  read_csv(here("data","bulkATAC","2026-04-20_G523_pairwise_HOMER_motifs.csv"),
+                      col_names=TRUE)
 ```
 
 ## load bulk ATAC-seq: G361+G411 (n=2, all, normoxia vs hypoxia)
@@ -1098,7 +1104,134 @@ glimpse(final_table)
 write_csv(final_table, 
           here("data","bulkATAC","2026-04-19_G361_G411_RW492_RW555_pairwise_HOMER_motifs.csv"),
                       col_names=TRUE)
+
+# reload
+final_table <- read_csv( 
+          here("data","bulkATAC","2026-04-19_G361_G411_RW492_RW555_pairwise_HOMER_motifs.csv"),
+                      col_names=TRUE)
 ```
+## HOMER motif cleaning and pre-processing
+```{r motif cleaning homer}
+
+motifsUp_homer.df<- read_csv(here("data","bulkATAC","2025_12-08_human_multiome_PIMOup_vs_PIMOdown_HOMER_motifsUP.csv"),
+                      col_names=TRUE)
+
+# newest version of homer_motif_cleaning
+homer_motif_cleaning_v2 <- function(df){
+  df_cleaned <- df %>%
+  mutate(
+    TF_cleaned = TF %>%
+      # Step 1: Remove the numerical suffix (e.g., _251)
+      # "AP.1.bZIP_1" -> "AP.1.bZIP"
+      str_remove("_\\d+$") %>%
+      
+      # Step 2: Handle the specific edge cases first.
+      # "Brachyury.T.box" -> "Brachyury"
+      # "Brn2-POU" -> "Brn2"
+      str_remove("\\.T\\.box$") %>%
+      str_remove("-Homeobox$") %>%
+      
+      # Step 3: Now, handle the general case by removing the last remaining 
+      # motif identifier (e.g., .bZIP, .DR1).
+      # "AP.1.bZIP" -> "AP.1"
+      # "RXR.NR..DR1" -> "RXR.NR.."
+      str_remove("\\.[^.]+$") %>%
+      
+      # Step 4: Replace all remaining periods with hyphens.
+      # "AP.1" -> "AP-1"
+      # "RXR.NR.." -> "RXR-NR--"
+      str_replace_all("\\.", "-") %>%
+      
+      # Step 5: Final cleanup. Remove any trailing hyphens.
+      # "RXR-NR--" -> "RXR-NR"
+      str_remove("-+$") %>%
+    
+      # Step 6: Additional edge cases:
+      str_remove("-Paired$") %>%
+      str_remove("-NR$") %>%
+      str_remove("-Forkhead$") %>%
+      str_remove("-Homeobox$") %>%
+      str_remove("-POU$") %>%
+      str_remove("-Ebox$") %>%
+      str_remove("-Zf$") %>%
+      str_remove("-EBV$") %>%
+      str_remove("-ETS$") %>%
+      str_replace_all("NFkB-p50-p52","NFkB-p50,p52") %>%
+      str_replace_all("CEBP-AP1","CEBP:AP1") %>%
+      str_replace_all("CEBP-CEBP","CEBP:CEBP") %>%
+      str_replace_all("ETS-E-box","ETS:E-box") %>%
+      str_replace_all("ETS-RUNX","ETS:RUNX") %>%
+      str_replace_all("EWS-ERG-fusion","EWS:ERG-fusion") %>%
+      str_replace_all("FOXA1-AR","FOXA1:AR") %>%
+      str_replace_all("GATA-SCL","GATA:SCL") %>%
+      str_replace_all("IRF-BATF-IRF","IRF:BATF") %>%
+      str_replace_all("NF1-FOXA1-CTF","NF1:FOXA1") %>%
+      str_replace_all("NFAT-AP1-RHD","NFAT:AP1") %>%
+      str_replace_all("Oct4-Sox17","Oct4:Sox17") %>%
+      str_replace_all("PAX3-FKHR-fusion","PAX3:FKHR-fusion") %>%
+      str_replace_all("FOXA1-AR","FOXA1:AR") %>%
+      str_replace_all("\\bFox\\b","Fox:Ebox") %>%
+      str_replace_all("PU-1","PU.1") %>%
+      str_replace_all("PU-1-IRF-ETS","PU.1-IRF") %>%
+      str_replace_all("PU.1-IRF8","PU.1:IRF8") %>%
+      str_replace_all("RBPJ","RBPJ:Ebox") %>%
+      str_replace_all("Stat3-il21","Stat3+il21") %>%
+      str_replace_all("Tbox-Smad-T-box","Tbox:Smad") %>%
+    
+      
+      
+      str_replace_all("Arnt-Ahr","Arnt:Ahr") %>%
+      str_replace_all("bZIP-IRF-bZIP","bZIP:IRF") %>%
+      str_replace_all("CTCF-SatelliteElement-Zf", "CTCF-SatelliteElement") %>%
+      str_replace_all("EWS-FLI1-fusion","EWS:FLI1-fusion") %>% 
+      str_replace_all("Fox-Ebox", "Fox:Ebox") %>%
+      str_replace_all("GRE-NR","GRE") %>%
+      str_replace_all("Pit1-1bp","Pit1+1bp") %>%
+      str_replace_all("Tlx","Tlx?") %>%
+      str_replace_all("OCT-OCT","OCT:OCT") %>%
+      str_replace_all("RAR-RXR","RAR:RXR") %>%
+      str_replace_all("ZNF143-STAF","ZNF143|STAF") %>%
+      str_replace_all("OCT4-SOX2-TCF-NANOG-POU-Homeobox","OCT4-SOX2-TCF-NANOG") %>%
+      str_replace_all("(Nkx\\d+)-(\\d+)", "\\1.\\2") # for Nkxn-n, where n is any number
+  )
+return (df_cleaned)    
+}
+
+motifsDown_homer.df_cleaned_temp<-homer_motif_cleaning_v2(motifsUp_homer.df)
+
+# old cleaning
+setdiff(motifsDown_homer.df_cleaned$TF_cleaned %>% unique(),
+G361_G411_G523_final_table$TF %>% unique()) %>% sort()
+# new cleaning
+setdiff(motifsDown_homer.df_cleaned_temp$TF_cleaned %>% unique(),
+G361_G411_G523_final_table$TF %>% unique()) %>% sort
+
+ # what is in the GSC only
+setdiff(G361_G411_G523_final_table$TF %>% unique(),
+        motifsDown_homer.df_cleaned$TF_cleaned %>% unique()) %>% sort()
+
+setdiff(G361_G411_G523_final_table$TF %>% unique(),
+        motifsDown_homer.df_cleaned_temp$TF_cleaned %>% unique()) %>% sort()
+```
+
+The following 16 motifs after version 2 cleaning are unique to human multiome HOMER (absent in GSC HOMER; not even related motifs in syntax)
+1. CDX4
+2. COUP-TFII
+3. Cux2
+4. E2A-bHLH--near_PU (Note: E2A alone is present in both, but this one is special)
+5. FOXK2
+6. Foxo3
+7. Fra2 (Fra1 exists in GSC though)
+8. Gata6 (other GATAs are available, but not this one)
+9. KLF3 (other Klfs available but not this specific one)
+10. NPAS (NPAS2 available not NPAS)
+11. PAX5-Paired (Pax5 already has a match, this one is condensed version)
+12. Pax7-Paired (Pax7 already has a match, this one is longest)
+13. Ronin
+14. SF1
+15. Six2 (Six1 available but not Six2)
+16. THRb
+
 
 ## Define motif compare plotting functions
 ```{r motif compare plotting functions}
@@ -2470,11 +2603,12 @@ plot_homer_heatmap_flexible(G361_G411_all_motifs_df, fdr_cutoff=0.005, top_n_ran
 
 dev.off()
 ```
-## testing new homer heatmap function
+## New binary heatmap functions for homer motifs
 ```{r new homer heatmap function, eval = FALSE}
 library(tidyverse)
 library(ComplexHeatmap)
 
+# Define colours used in heatmap
 my_colors <- list(
   # 1. Cell Lines: Use distinct bold colors
   cell_line = c(
@@ -2606,12 +2740,641 @@ draw(hm_2021)
 hm_strict <- plot_homer_heatmap(final_table, fdr_cutoff = 0.01, top_n_rank = 10,
                                 annotation_colors = my_colors)
 draw(hm_strict)
+
+# heatmap now with TF frequency filtering:
+library(tidyverse)
+library(ComplexHeatmap)
+
+plot_homer_heatmap_freq <- function(df, 
+                               fdr_cutoff = 0.05, 
+                               top_n_rank = 60, 
+                               min_conditions = 1,
+                               annotation_colors = NULL) {
+  
+  # 1. Identify and Print passing TFs
+  passing_tfs <- df %>%
+    filter(`q-value/FDR` < fdr_cutoff, Rank <= top_n_rank) %>%
+    pull(TF) %>%
+    unique() %>%
+    sort()
+
+  if(length(passing_tfs) == 0) {
+    message("No motifs passed the thresholds.")
+    return(NULL)
+  }
+  
+  cat("--- Motifs Passing Thresholds ---\n")
+  cat("FDR <", fdr_cutoff, "| Rank <=", top_n_rank, "\n")
+  cat("Total TFs:", length(passing_tfs), "\n")
+  cat("---------------------------------\n\n")
+
+  # 2. Build the binary matrix
+  # Note: Ensure all grouping variables are characters to avoid mapping errors
+  df_matrix <- df %>%
+    filter(TF %in% passing_tfs) %>%
+    mutate(
+      sample_id = paste(as.character(cell_line), 
+                        as.character(dataset), 
+                        as.character(condition), 
+                        sep = "|"),
+      pass = if_else(`q-value/FDR` < fdr_cutoff & Rank <= top_n_rank, 1, 0)
+    ) %>%
+    group_by(TF, sample_id) %>%
+    summarize(pass = max(pass, na.rm = TRUE), .groups = "drop") %>%
+    pivot_wider(names_from = sample_id, values_from = pass, values_fill = 0) %>%
+    column_to_rownames("TF") %>%
+    as.matrix()
+
+  # 3. Frequency Filter (min_conditions)
+  tf_counts <- rowSums(df_matrix)
+  keep_tfs <- names(tf_counts[tf_counts >= min_conditions])
+  df_matrix <- df_matrix[keep_tfs, , drop = FALSE]
+
+  if(nrow(df_matrix) == 0) {
+    message("No TFs pass in ", min_conditions, " or more conditions.")
+    return(NULL)
+  }
+
+  # 4. Robust Metadata Extraction (Fix for 'sample_id' error)
+  # Instead of piping through separate(), we build the dataframe directly
+  sample_names <- colnames(df_matrix)
+  meta_list <- str_split(sample_names, "\\|")
+  
+  col_metadata <- data.frame(
+    cell_line = sapply(meta_list, `[`, 1),
+    dataset   = sapply(meta_list, `[`, 2),
+    condition = sapply(meta_list, `[`, 3),
+    row.names = sample_names, # This sets the rownames directly
+    stringsAsFactors = FALSE
+  )
+
+  # 5. Create Heatmap Annotation
+  ha_cols <- annotation_colors[names(annotation_colors) %in% colnames(col_metadata)]
+  
+  ha <- HeatmapAnnotation(
+    df = col_metadata, 
+    col = ha_cols,
+    annotation_name_side = "left"
+  )
+
+  # 6. Render Heatmap
+  Heatmap(df_matrix, 
+          name = "Enriched", 
+          col = c("0" = "white", "1" = "firebrick"),
+          top_annotation = ha,
+          rect_gp = gpar(col = "grey95", lwd = 0.5),
+          column_title = paste0("HOMER Motif Enrichment\n(FDR < ", 
+                                fdr_cutoff, ", Rank <= ", top_n_rank, 
+                                ", Min Conditions >= ", min_conditions, ")"),
+          cluster_rows = TRUE, 
+          cluster_columns = TRUE,
+          show_column_names = FALSE,
+          row_names_gp = gpar(fontsize = 7))
+}
+}
+
+# binary heatmap with rowAnnotation corresponding to matching significant motifsUp or motifsDown from multiome
+
+plot_homer_heatmap_freq_highlight <- function(df, 
+                               fdr_cutoff = 0.05, 
+                               top_n_rank = 60, 
+                               min_conditions = 1,
+                               motif_list = NULL,
+                               cluster_columns = TRUE,
+                               annotation_colors = NULL) {
+  
+  # 1. Identify TFs passing initial thresholds
+  passing_tfs <- df %>%
+    filter(`q-value/FDR` < fdr_cutoff, Rank <= top_n_rank) %>%
+    pull(TF) %>%
+    unique() %>%
+    sort()
+
+  if(length(passing_tfs) == 0) {
+    message("No motifs passed the initial thresholds (FDR/Rank).")
+    return(NULL)
+  }
+
+  # 2. Build the binary matrix
+  df_matrix <- df %>%
+    filter(TF %in% passing_tfs) %>%
+    mutate(
+      sample_id = paste(cell_line, dataset, condition, sep = "|"),
+      pass = if_else(`q-value/FDR` < fdr_cutoff & Rank <= top_n_rank, 1, 0)
+    ) %>%
+    group_by(TF, sample_id) %>%
+    summarize(pass = max(pass, na.rm = TRUE), .groups = "drop") %>%
+    pivot_wider(names_from = sample_id, values_from = pass, values_fill = 0) %>%
+    column_to_rownames("TF") %>%
+    as.matrix()
+
+  # 3. Frequency Filtering
+  tf_counts <- rowSums(df_matrix)
+  keep_tfs <- names(tf_counts[tf_counts >= min_conditions])
+  df_matrix <- df_matrix[keep_tfs, , drop = FALSE]
+
+  if(nrow(df_matrix) == 0) {
+    message("No TFs found that pass in ", min_conditions, " or more conditions.")
+    return(NULL)
+  }
+
+  # --- NEW: HEATMAP SUMMARY PRINTING ---
+  cat("==========================================\n")
+  cat("      HOMER HEATMAP SUMMARY              \n")
+  cat("==========================================\n")
+  cat("Thresholds: FDR <", fdr_cutoff, "| Rank <=", top_n_rank, "\n")
+  cat("Shared by:  >=", min_conditions, "conditions\n")
+  cat("Final Size:", nrow(df_matrix), "TFs x", ncol(df_matrix), "Samples\n")
+  
+  # Print the top recurring TFs
+  cat("\nTop 10 Most Frequent Motifs:\n")
+  top_recurring <- sort(tf_counts[keep_tfs], decreasing = TRUE)
+  print(head(top_recurring, 10))
+
+  # Summary of the scalable highlights
+  if (!is.null(motif_list)) {
+    cat("\nNumber of motif_list Matches to df:\n")
+    for (list_name in names(motif_list)) {
+      matches <- intersect(rownames(df_matrix), motif_list[[list_name]])
+      cat("- ", list_name, ": ", length(matches), "/", length(motif_list[[list_name]]), " found\n", sep="")
+      if(length(matches) > 0) {
+        cat("  Top matches:", paste(head(matches, 50), collapse = ", "), 
+            ifelse(length(matches) > 50, "...", ""), "\n")
+      }
+    }
+  }
+  cat("==========================================\n\n")
+
+  # 4. Construct Scalable Row Annotations (Highlights)
+  row_ha <- NULL
+  if (!is.null(motif_list)) {
+    row_anno_df <- data.frame(row.names = rownames(df_matrix))
+    row_anno_cols <- list()
+    list_palette <- c("#4DAF4A", "#984EA3", "#FF7F00", "#FFFF33", "#A65628")
+    
+    for (i in seq_along(motif_list)) {
+      list_name <- names(motif_list)[i]
+      row_anno_df[[list_name]] <- ifelse(rownames(df_matrix) %in% motif_list[[i]], "Yes", "No")
+      current_col <- list_palette[(i - 1) %% length(list_palette) + 1]
+      row_anno_cols[[list_name]] <- c("Yes" = current_col, "No" = "white")
+    }
+    
+    row_ha <- rowAnnotation(
+      df = row_anno_df, col = row_anno_cols,
+      simple_anno_size = unit(3, "mm"),
+      show_annotation_name = TRUE, annotation_name_side = "top",
+      annotation_name_gp = gpar(fontsize = 8)
+    )
+  }
+
+  # 5. Metadata and Final Rendering
+  sample_names <- colnames(df_matrix)
+  meta_list <- str_split(sample_names, "\\|")
+  col_metadata <- data.frame(
+    cell_line = sapply(meta_list, `[`, 1),
+    dataset   = sapply(meta_list, `[`, 2),
+    condition = sapply(meta_list, `[`, 3),
+    row.names = sample_names
+  )
+
+  ha_top <- HeatmapAnnotation(df = col_metadata, col = annotation_colors, annotation_name_side = "left")
+
+  Heatmap(df_matrix, 
+          name = "Significantly Enriched", 
+          col = c("0" = "white", "1" = "black"),
+          top_annotation = ha_top,
+          right_annotation = row_ha, 
+          row_names_side = "left",
+          rect_gp = gpar(col = "grey95", lwd = 0.5),
+          column_title = paste0("HOMER Motif Enrichment\n(FDR < ", 
+                                fdr_cutoff, ", Rank <= ", top_n_rank, 
+                                ", Min Conditions >= ", min_conditions, ")"),
+          heatmap_legend_param = list( # here we rename the 0 and 1 to be readable
+            title = "Significantly Enriched",
+            at = c(0, 1),
+            labels = c("False", "True")
+          ),
+          cluster_rows = TRUE, 
+          cluster_columns = cluster_columns,
+          show_column_names = FALSE,
+          row_names_gp = gpar(fontsize = 8))
+}
+
+
+
+
+```
+### Combine G361/G411 pairwise motifs with G523 motifs
+```{r combine G361/G411/G523, eval = FALSE}
+# Check column types side-by-side
+types_final <- sapply(final_table, class)
+types_g523  <- sapply(G523_final_table, class)
+
+# Find which columns don't match
+mismatches <- types_final[types_final != types_g523[names(types_final)]]
+print(mismatches)
+
+# Function to cast columns to match a reference table
+align_types <- function(target_df, reference_df) {
+  # Get names of columns present in both
+  common_cols <- intersect(names(target_df), names(reference_df))
+  
+  for (col in common_cols) {
+    ref_class <- class(reference_df[[col]])[1]
+    
+    # Cast target column to match reference class
+    if (ref_class == "numeric") {
+      target_df[[col]] <- as.numeric(target_df[[col]])
+    } else if (ref_class == "character") {
+      target_df[[col]] <- as.character(target_df[[col]])
+    } else if (ref_class == "integer") {
+      target_df[[col]] <- as.integer(target_df[[col]])
+    }
+  }
+  return(target_df)
+}
+
+# Apply the alignment
+G523_final_table <- align_types(G523_final_table, final_table)
+
+# Combine the two tables
+G361_G411_G523_final_table <- bind_rows(final_table, G523_final_table)
+
+# Verify the combination
+# This will show you the count of rows from each dataset/cell_line
+G361_G411_G523_final_table %>%
+  group_by(cell_line, dataset) %>%
+  tally()
+
+write_csv(G361_G411_G523_final_table, 
+          here("data","bulkATAC","2026-04-21_G361_G411_G523_pairwise_HOMER_motifs.csv"),
+                      col_names=TRUE)
 ```
 
-## plot and export binary heatmaps
+## Compare to human multiome PIMO_up_status pairwise results
+```{r binary heatmap of GSC and multiome highlighted}
+# load multiome motifs
+motifsUp_homer.df_cleaned <-read_csv(
+  here(
+    "data",
+    "human_multiome",
+    "motifEnrichment_homer_PIMO_up_status",
+    "motifsUp_PIMO_up_status_PIMOup_vs_PIMOdown_homer.csv"
+  )
+)
+
+motifsDown_homer.df_cleaned <-read_csv(
+  here(
+    "data",
+    "human_multiome",
+    "motifEnrichment_homer_PIMO_up_status",
+    "motifsDown_PIMO_up_status_PIMOup_vs_PIMOdown_homer.csv"
+  )
+)
+# 332 motifs for multiome, how many match prior to filtering
+
+G361_G411_G523_final_table$TF %>% unique() %>% length # 302
+motifsDown_homer.df_cleaned$TF_cleaned %>% unique() %>% length # 320
+
+# compare the 302 vs 320 motifs
+intersect(
+  G361_G411_G523_final_table$TF %>% unique(),
+  motifsDown_homer.df_cleaned$TF_cleaned %>% unique()
+) %>% length # 281 of 320 multiome motifs are in 
+
+# 320-281 = 39 missing motifs; can they be repaired
+ # what is in the GSC only
+setdiff(G361_G411_G523_final_table$TF %>% unique(),
+        motifsDown_homer.df_cleaned$TF_cleaned %>% unique())
+ # what is in the human multiome only
+setdiff(motifsDown_homer.df_cleaned$TF_cleaned %>% unique(),
+G361_G411_G523_final_table$TF %>% unique())
+
+shared_sig_motifsUp <- intersect(
+  G361_G411_G523_final_table$TF %>% unique(),
+  motifsUp_homer.df_cleaned %>% filter(rank <= 60 & (mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned)
+)
+
+shared_sig_motifsDown <- intersect(
+  G361_G411_G523_final_table$TF %>% unique(),
+  motifsDown_homer.df_cleaned %>% filter(rank <= 60 & (mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned)
+)
+
+shared_sig_motifsUp %>% length # 49
+shared_sig_motifsDown %>% length # 58
+# which ones are not in? can we correct them?
+
+# another round of cleaning
+motifsUp_homer.df_cleaned_v2 <- homer_motif_cleaning_v2(motifsUp_homer.df_cleaned)
+motifsDown_homer.df_cleaned_v2 <- homer_motif_cleaning_v2(motifsDown_homer.df_cleaned)
+
+intersect(
+  G361_G411_G523_final_table$TF %>% unique(),
+  motifsDown_homer.df_cleaned_v2$TF_cleaned %>% unique()
+) %>% length # 302 of 320 multiome motifs are in 
+
+shared_sig_motifsUp <- intersect(
+  G361_G411_G523_final_table$TF %>% unique(),
+  motifsUp_homer.df_cleaned_v2 %>% filter(rank <= 60 & (mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned)
+)
+
+shared_sig_motifsDown <- intersect(
+  G361_G411_G523_final_table$TF %>% unique(),
+  motifsDown_homer.df_cleaned_v2 %>% filter(rank <= 60 & (mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned)
+)
+
+shared_sig_motifsUp %>% length # 58
+shared_sig_motifsDown %>% length # 60
+
+# testing threshold filters on multiome;
+## 1. rank and mlog10Padj > -log10(0.05)
+motifsUp_homer.df_cleaned_v2 %>% filter(rank <= 60 & (mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) %>% length()
+motifsDown_homer.df_cleaned_v2 %>% filter(rank <= 60 & (mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) %>% length()
+## 2. mlog10Padj > -log10(0.05) only
+motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) %>% length() # 146
+motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) %>% length() # 97
+
+# what threshold did we use for G523 previously in ranked plot
+
+hm <- plot_homer_heatmap_freq_highlight(G361_G411_G523_final_table_filtered, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 6,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors)
+draw(hm, merge_legend = FALSE)
+draw(hm, merge_legend = TRUE)
+```
+
+## Export PDF for binary heatmaps
 ```{r plot and export binary heatmaps, eval = FALSE}
+
+# All three GSCs into one heatmap
 pdf(here("data","bulkATAC",
-         "2026-04-20_G361_G411_G523_HOMER_motifs_binaryHeatmap.pdf"), 
+         "2026-04-27_G361_G411_G523_combined_HOMER_motifs_binaryHeatmap.pdf"), 
+    width = 10, height = 14)
+plot_homer_heatmap(G361_G411_G523_final_table, fdr_cutoff = 0.05, top_n_rank = 10,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G361_G411_G523_final_table, fdr_cutoff = 0.05, top_n_rank = 25,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G361_G411_G523_final_table, fdr_cutoff = 0.05, top_n_rank = 60,
+                                annotation_colors = my_colors)
+
+# G361/G411 but with G523 edgeR only
+G361_G411_G523_final_table_filtered_edgeR <- G361_G411_G523_final_table %>%
+  filter(!str_detect(condition, "deseq2"))
+plot_homer_heatmap(G361_G411_G523_final_table_filtered_edgeR, fdr_cutoff = 0.05, top_n_rank = 10,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G361_G411_G523_final_table_filtered_edgeR, fdr_cutoff = 0.05, top_n_rank = 25,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G361_G411_G523_final_table_filtered_edgeR, fdr_cutoff = 0.05, top_n_rank = 60,
+                                annotation_colors = my_colors)
+## with frequency filtering
+plot_homer_heatmap_freq(G361_G411_G523_final_table_filtered_edgeR, fdr_cutoff = 0.05, top_n_rank = 60,
+                                min_conditions = 1,
+                                annotation_colors = my_colors)
+plot_homer_heatmap_freq(G361_G411_G523_final_table_filtered_edgeR, fdr_cutoff = 0.05, top_n_rank = 60,
+                                min_conditions = 4,
+                                annotation_colors = my_colors)
+plot_homer_heatmap_freq(G361_G411_G523_final_table_filtered_edgeR, fdr_cutoff = 0.05, top_n_rank = 60,
+                                min_conditions = 6,
+                                annotation_colors = my_colors)
+
+# G361/G411 but with G523 deseq2 only
+G361_G411_G523_final_table_filtered_deseq2 <- G361_G411_G523_final_table %>%
+  filter(!str_detect(condition, "edgeR"))
+plot_homer_heatmap(G361_G411_G523_final_table_filtered_deseq2, fdr_cutoff = 0.05, top_n_rank = 10,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G361_G411_G523_final_table_filtered_deseq2, fdr_cutoff = 0.05, top_n_rank = 25,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G361_G411_G523_final_table_filtered_deseq2, fdr_cutoff = 0.05, top_n_rank = 60,
+                                annotation_colors = my_colors)
+## with frequency filtering
+plot_homer_heatmap_freq(G361_G411_G523_final_table_filtered_deseq2, fdr_cutoff = 0.05, top_n_rank = 60,
+                                min_conditions = 1,
+                                annotation_colors = my_colors)
+plot_homer_heatmap_freq(G361_G411_G523_final_table_filtered_deseq2, fdr_cutoff = 0.05, top_n_rank = 60,
+                                min_conditions = 4,
+                                annotation_colors = my_colors)
+plot_homer_heatmap_freq(G361_G411_G523_final_table_filtered_deseq2, fdr_cutoff = 0.05, top_n_rank = 60,
+                                min_conditions = 6,
+                                annotation_colors = my_colors)
+dev.off()
+
+# With rowAnnotation of human_multiome PIMOup_vs_PIMOdown motifs
+pdf(here("data","bulkATAC",
+         "2026-04-27_G361_G411_G523_combined_HOMER_motifs_vs_human_multiome_PIMOup_vs_PIMOdown_binaryHeatmap.pdf"), 
+    width = 10, height = 14)
+
+# G361/G411 but with G523 edgeR
+  
+plot_homer_heatmap_freq_highlight(G361_G411_G523_final_table_filtered_edgeR, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 1,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+plot_homer_heatmap_freq_highlight(G361_G411_G523_final_table_filtered_edgeR, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 4,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+plot_homer_heatmap_freq_highlight(G361_G411_G523_final_table_filtered_edgeR, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 6,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+# G361/G411 but with G523 deseq2
+  
+plot_homer_heatmap_freq_highlight(G361_G411_G523_final_table_filtered_deseq2, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 1,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+plot_homer_heatmap_freq_highlight(G361_G411_G523_final_table_filtered_deseq2, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 4,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+plot_homer_heatmap_freq_highlight(G361_G411_G523_final_table_filtered_deseq2, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 6,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+# G361/G411 only
+plot_homer_heatmap_freq_highlight(final_table, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 1,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+plot_homer_heatmap_freq_highlight(final_table, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 4,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+plot_homer_heatmap_freq_highlight(final_table, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 6,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+# G523 only edgeR only
+G523_filtered <- G523_final_table %>%
+  filter(!str_detect(condition, "deseq2"))
+plot_homer_heatmap_freq_highlight(G523_filtered, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 1,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+plot_homer_heatmap_freq_highlight(G523_filtered, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 2,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+plot_homer_heatmap_freq_highlight(G523_filtered, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 4,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+ plot_homer_heatmap_freq_highlight(G523_filtered, 
+                                   fdr_cutoff = 0.05, 
+                                   top_n_rank = 60,
+                                   min_conditions = 2,
+                                   motif_list = list(
+                                   PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                   PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                   ),
+                                    cluster_columns = FALSE,
+                                   annotation_colors = my_colors) %>% 
+   draw(merge_legend = TRUE)
+
+# G523 only deseq2 only
+G523_filtered_deseq2 <- G523_final_table %>%
+  filter(!str_detect(condition, "edgeR"))
+plot_homer_heatmap_freq_highlight(G523_filtered_deseq2, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 1,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+plot_homer_heatmap_freq_highlight(G523_filtered_deseq2, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 2,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+plot_homer_heatmap_freq_highlight(G523_filtered_deseq2, 
+                                  fdr_cutoff = 0.05, 
+                                  top_n_rank = 60,
+                                  min_conditions = 4,
+                                  motif_list = list(
+                                  PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                  PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                  ),
+                                  annotation_colors = my_colors) %>% 
+  draw(merge_legend = TRUE)
+
+ plot_homer_heatmap_freq_highlight(G523_filtered_deseq2, 
+                                   fdr_cutoff = 0.05, 
+                                   top_n_rank = 60,
+                                   min_conditions = 2,
+                                   motif_list = list(
+                                   PIMOhigh_motifsUp = motifsUp_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned),
+                                   PIMOhigh_motifsDown = motifsDown_homer.df_cleaned_v2 %>% filter((mlog10Padj > -log10(0.05))) %>% pull(TF_cleaned) 
+                                   ),
+                                    cluster_columns = FALSE,
+                                   annotation_colors = my_colors) %>% 
+   draw(merge_legend = TRUE)
+
+dev.off()
+
+
+# G361/G411 or G523 binary heatmap of pairwise conditions
+pdf(here("data","bulkATAC",
+         "2026-04-27_G361_G411_G523_HOMER_motifs_binaryHeatmap.pdf"), 
     width = 10, height = 14)
 # G361 and G411
 plot_homer_heatmap(final_table, fdr_cutoff = 0.05, top_n_rank = 10,
@@ -2656,8 +3419,25 @@ plot_homer_heatmap(G523_filtered, fdr_cutoff = 0.005, top_n_rank = 25,
 plot_homer_heatmap(G523_filtered, fdr_cutoff = 0.005, top_n_rank = 60,
                                 annotation_colors = my_colors)
 
+# G523 with deseq2 only (used in supplemental table)
+G523_filtered_deseq2 <- G523_final_table %>%
+  filter(!str_detect(condition, "edgeR"))
+plot_homer_heatmap(G523_filtered_deseq2, fdr_cutoff = 0.05, top_n_rank = 10,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_filtered_deseq2, fdr_cutoff = 0.05, top_n_rank = 25,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_filtered_deseq2, fdr_cutoff = 0.05, top_n_rank = 60,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_filtered_deseq2, fdr_cutoff = 0.005, top_n_rank = 10,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_filtered_deseq2, fdr_cutoff = 0.005, top_n_rank = 25,
+                                annotation_colors = my_colors)
+plot_homer_heatmap(G523_filtered_deseq2, fdr_cutoff = 0.005, top_n_rank = 60,
+                                annotation_colors = my_colors)
 dev.off()
 ```
+
+
 # ChromVar Positive-TF Regulators Plot
 ```{r chromva positive TF regulators plot}
 class(chromVarDev_pos_TF_reg)
