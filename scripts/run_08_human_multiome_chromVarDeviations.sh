@@ -10,25 +10,30 @@
 #SBATCH --time=02:00:00
 
 # Parse command line arguments
-# First argument: motif set (homer, encode, JASPAR2020, JASPAR2018, JASPAR2016, cisbp)
+# First argument:  motif set (homer, encode, JASPAR2020, JASPAR2018, JASPAR2016, cisbp)
 # Second argument: groupBy variable (e.g., "PIMO_up_status", "hybrid_pair")
-# Third argument (optional): comma-separated motifs of interest (e.g., "SOX,HIF,ARNT,NF1,NFI")
+# Third argument:  ArchR project name (e.g., "human_multiome_harmony_merged_malig_peak")
+# Fourth argument (optional): comma-separated motifs of interest (e.g., "SOX,HIF,ARNT,NF1,NFI")
 # Example usage:
 # sbatch scripts/run_08_human_multiome_chromVarDeviations.sh homer PIMO_up_status
-# sbatch scripts/run_08_human_multiome_chromVarDeviations.sh cisbp hybrid_pair "SOX,HIF,ARNT,NF1,NFI"
+# sbatch scripts/run_08_human_multiome_chromVarDeviations.sh cisbp hybrid_pair human_multiome_harmony_merged_malig_peak "SOX,HIF,ARNT,NF1,NFI"
+# sbatch scripts/run_08_human_multiome_chromVarDeviations.sh homer combined_program human_multiome_hmmp_k3_program_all_cells
 
 MOTIF_SET="${1:-homer}"  # Default to "homer" if no argument provided
 GROUP_BY="${2:-PIMO_up_status}"  # Default to "PIMO_up_status" if no argument provided
-MOTIFS_OF_INTEREST="${3:-HIF,ATF,FOS,FRA,JUN,AP-1,AP1,Bach,NRF,MAF,RFX,NF,SOX,OLIG,Neuro,ASCL}"  # Default motifs if not provided
+ARCHR_PROJECT="${3:-human_multiome_harmony_merged_malig_peak}"  # Default project name if not provided
+MOTIFS_OF_INTEREST="${4:-HIF,ATF,FOS,FRA,JUN,AP-1,AP1,Bach,NRF,MAF,RFX,NF,SOX,OLIG,Neuro,ASCL}"  # Default motifs if not provided
 
 # Export the parameters so R can access them
 export MOTIF_SET
 export GROUP_BY
+export ARCHR_PROJECT
 export MOTIFS_OF_INTEREST
 
 echo "Running chromVAR deviations analysis with:"
 echo "  motifSet: ${MOTIF_SET}"
 echo "  groupBy: ${GROUP_BY}"
+echo "  ArchR project: ${ARCHR_PROJECT}"
 echo "  motifs of interest: ${MOTIFS_OF_INTEREST}"
 
 # Load necessary modules (adjust as needed for your system)
@@ -45,8 +50,9 @@ library(ggplot2)
 set.seed(1)
 
 # Get parameters from environment variables
-motifSet <- Sys.getenv("MOTIF_SET", unset = "homer")
-groupBy <- Sys.getenv("GROUP_BY", unset = "PIMO_up_status")
+motifSet      <- Sys.getenv("MOTIF_SET",      unset = "homer")
+groupBy       <- Sys.getenv("GROUP_BY",       unset = "PIMO_up_status")
+archrProject  <- Sys.getenv("ARCHR_PROJECT",  unset = "human_multiome_harmony_merged_malig_peak")
 motifsOfInterest <- Sys.getenv("MOTIFS_OF_INTEREST", unset = "SOX,HIF,ARNT,NF1,NFI")
 
 # Convert comma-separated string to vector
@@ -54,6 +60,7 @@ moi <- trimws(unlist(strsplit(motifsOfInterest, ",")))
 
 cat("Using motifSet:", motifSet, "\n")
 cat("Using groupBy:", groupBy, "\n")
+cat("Using ArchR project:", archrProject, "\n")
 cat("Motifs of interest:", paste(moi, collapse = ", "), "\n")
 
 # Set the number of threads for ArchR
@@ -63,18 +70,18 @@ addArchRThreads(threads = 18)
 addArchRGenome("hg38")
 
 # Load the project
-proj <- loadArchRProject(path = "human_multiome_harmony_merged_malig_peak")
+proj <- loadArchRProject(path = archrProject)
 
 # Create file naming prefix based on groupBy variable
 filePrefix <- gsub("_", "", groupBy)
 
 # Create output directory
 annoName <- paste0("Motif_", motifSet)
-outDir <- here(paste0("human_multiome_harmony_merged_malig_peak/chromVarDeviations_", motifSet, "_", groupBy, "/"))
+outDir <- here(paste0(archrProject, "/chromVarDeviations_", motifSet, "_", groupBy, "/"))
 dir.create(outDir, showWarnings = FALSE, recursive = TRUE)
 
 # Load and assign appropriate PeakSet based on groupBy
-peakSetPath <- paste0("/cluster/projects/wouterslab/ArchR103_4/human_multiome_harmony_merged_malig_peak/PeakCalls/PeakSet_gr_", groupBy, ".rds")
+peakSetPath <- paste0("/cluster/projects/wouterslab/ArchR103_4/", archrProject, "/PeakCalls/PeakSet_gr_", groupBy, ".rds")
 print(paste("Loading PeakSet from:", peakSetPath))
 
 if (file.exists(peakSetPath)) {
@@ -173,11 +180,21 @@ if (length(markerMotifs) == 0) {
 } else {
     # Plot motif deviations by group
     print("Plotting motif deviations by group")
-    # set custom discrete color palette
+    # set custom discrete color palettes
     PIMO_up_status_colors <- c("PIMOdown" = "blue", "PIMOinter" = "gold", "PIMOup" = "red")
+    combined_program_colors <- c(
+        "PIMOdown"  = "blue",
+        "PIMOinter" = "gold",
+        "PIMOup"    = "red",
+        "program_1" = "#FA8072",  # salmon
+        "program_2" = "#01796F",  # pine green
+        "program_3" = "#796A5B"   # greyish brown
+    )
+    group_pal <- if (groupBy == "PIMO_up_status") PIMO_up_status_colors else
+                 if (groupBy == "combined_program") combined_program_colors else NULL
     p <- plotGroups(
         ArchRProj = proj,
-        pal = if (groupBy == "PIMO_up_status") PIMO_up_status_colors else NULL,
+        pal = group_pal,
         groupBy = groupBy, 
         colorBy = deviationsMatrixName, 
         name = markerMotifs,
@@ -336,13 +353,23 @@ colorBy = "GeneExpressionMatrix",
 name = "VEGFA", 
 embedding = "UMAP_Harmony_LSI_Combined")
 
-# set custom discrete color palette
+# set custom discrete color palettes
 PIMO_up_status_colors <- c("PIMOdown" = "blue", "PIMOinter" = "gold", "PIMOup" = "red")
+combined_program_colors <- c(
+    "PIMOdown"  = "blue",
+    "PIMOinter" = "gold",
+    "PIMOup"    = "red",
+    "program_1" = "#FA8072",  # salmon
+    "program_2" = "#01796F",  # pine green
+    "program_3" = "#796A5B"   # greyish brown
+)
+group_pal <- if (groupBy == "PIMO_up_status") PIMO_up_status_colors else
+             if (groupBy == "combined_program") combined_program_colors else NULL
 
 g2 <- plotEmbedding(proj, 
 colorBy = "cellColData", 
-name = "PIMO_up_status",
-pal = PIMO_up_status_colors, 
+name = groupBy,
+pal = group_pal, 
 embedding = "UMAP_Harmony_LSI_Combined")
 
 g3 <- plotEmbedding(proj, 
