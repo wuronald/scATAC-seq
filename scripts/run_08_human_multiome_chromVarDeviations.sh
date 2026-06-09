@@ -14,27 +14,32 @@
 # Second argument: groupBy variable (e.g., "PIMO_up_status", "hybrid_pair")
 # Third argument:  ArchR project name (e.g., "human_multiome_harmony_merged_malig_peak")
 # Fourth argument (optional): comma-separated motifs of interest (e.g., "SOX,HIF,ARNT,NF1,NFI")
+# Fifth argument  (optional): comma-separated groupBy levels to exclude from plotGroups (e.g., "PIMOup,PIMOinter")
 # Example usage:
 # sbatch scripts/run_08_human_multiome_chromVarDeviations.sh homer PIMO_up_status
 # sbatch scripts/run_08_human_multiome_chromVarDeviations.sh cisbp hybrid_pair human_multiome_harmony_merged_malig_peak "SOX,HIF,ARNT,NF1,NFI"
-# sbatch scripts/run_08_human_multiome_chromVarDeviations.sh homer combined_program human_multiome_hmmp_k3_program_all_cells
+# sbatch scripts/run_08_human_multiome_chromVarDeviations.sh homer combined_program human_multiome_hmmp_k3_program_all_cells "" "PIMOup"
+# sbatch scripts/run_08_human_multiome_chromVarDeviations.sh cisbp combined_program human_multiome_hmmp_k3_program_all_cells "SOX,HIF" "PIMOup,PIMOinter"
 
 MOTIF_SET="${1:-homer}"  # Default to "homer" if no argument provided
 GROUP_BY="${2:-PIMO_up_status}"  # Default to "PIMO_up_status" if no argument provided
 ARCHR_PROJECT="${3:-human_multiome_harmony_merged_malig_peak}"  # Default project name if not provided
 MOTIFS_OF_INTEREST="${4:-HIF,ATF,FOS,FRA,JUN,AP-1,AP1,Bach,NRF,MAF,RFX,NF,SOX,OLIG,Neuro,ASCL}"  # Default motifs if not provided
+EXCLUDE_GROUPS="${5:-}"  # Default to empty (no exclusions) if not provided
 
 # Export the parameters so R can access them
 export MOTIF_SET
 export GROUP_BY
 export ARCHR_PROJECT
 export MOTIFS_OF_INTEREST
+export EXCLUDE_GROUPS
 
 echo "Running chromVAR deviations analysis with:"
 echo "  motifSet: ${MOTIF_SET}"
 echo "  groupBy: ${GROUP_BY}"
 echo "  ArchR project: ${ARCHR_PROJECT}"
 echo "  motifs of interest: ${MOTIFS_OF_INTEREST}"
+echo "  exclude groups: ${EXCLUDE_GROUPS:-none}"
 
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
@@ -54,14 +59,19 @@ motifSet      <- Sys.getenv("MOTIF_SET",      unset = "homer")
 groupBy       <- Sys.getenv("GROUP_BY",       unset = "PIMO_up_status")
 archrProject  <- Sys.getenv("ARCHR_PROJECT",  unset = "human_multiome_harmony_merged_malig_peak")
 motifsOfInterest <- Sys.getenv("MOTIFS_OF_INTEREST", unset = "SOX,HIF,ARNT,NF1,NFI")
+excludeGroupsEnv <- Sys.getenv("EXCLUDE_GROUPS", unset = "")
 
 # Convert comma-separated string to vector
 moi <- trimws(unlist(strsplit(motifsOfInterest, ",")))
+
+# Convert comma-separated exclude groups to vector (empty vector if unset)
+excludeGroups <- if (nchar(excludeGroupsEnv) > 0) trimws(unlist(strsplit(excludeGroupsEnv, ","))) else character(0)
 
 cat("Using motifSet:", motifSet, "\n")
 cat("Using groupBy:", groupBy, "\n")
 cat("Using ArchR project:", archrProject, "\n")
 cat("Motifs of interest:", paste(moi, collapse = ", "), "\n")
+cat("Exclude groups from plotGroups:", if (length(excludeGroups) > 0) paste(excludeGroups, collapse = ", ") else "none", "\n")
 
 # Set the number of threads for ArchR
 addArchRThreads(threads = 18)
@@ -192,13 +202,44 @@ if (length(markerMotifs) == 0) {
     )
     group_pal <- if (groupBy == "PIMO_up_status") PIMO_up_status_colors else
                  if (groupBy == "combined_program") combined_program_colors else NULL
+
+    # Subset the project to exclude unwanted groups from plotGroups, if any
+    # FIX: Give the folder an completely unique prefix so ArchR's internal gsub doesn't break
+    subsetTmpDir <- here(paste0("TMP_SUBSET_FOR_PLOTTING_", filePrefix))
+    # subsetTmpDir <- here(paste0(archrProject, "_plotGroups_subset_tmp")) # use a temporary directory for the subsetted project (absolute path)
+    if (length(excludeGroups) > 0) {
+        print(paste("Excluding groups from plotGroups:", paste(excludeGroups, collapse = ", ")))
+        cellsToKeep <- proj$cellNames[!(proj@cellColData[[groupBy]] %in% excludeGroups)]
+        print(paste("Cells before exclusion:", length(proj$cellNames), "| After:", length(cellsToKeep)))
+        
+        projSubset <- subsetArchRProject(
+            ArchRProj = proj,
+            cells = cellsToKeep,
+            outputDirectory = subsetTmpDir,
+            dropCells = TRUE,
+            force = TRUE
+        )
+        # Re-add imputation weights on the subsetted project
+        print("Re-adding imputation weights on subsetted project")
+        projSubset <- addImputeWeights(
+            projSubset,
+            reducedDims = "Harmony_LSI_Combined"
+        )
+        # Drop excluded levels from the palette so the legend stays clean
+        group_pal_subset <- group_pal[!names(group_pal) %in% excludeGroups]
+    } else {
+        print("No groups excluded; using full project for plotGroups")
+        projSubset <- proj
+        group_pal_subset <- group_pal
+    }
+
     p <- plotGroups(
-        ArchRProj = proj,
-        pal = group_pal,
+        ArchRProj = projSubset,
+        pal = group_pal_subset,
         groupBy = groupBy, 
         colorBy = deviationsMatrixName, 
         name = markerMotifs,
-        imputeWeights = getImputeWeights(proj)
+        imputeWeights = getImputeWeights(projSubset)
     )
     
     # Customize the plots
@@ -231,6 +272,13 @@ if (length(markerMotifs) == 0) {
         ArchRProj = proj, 
         addDOC = TRUE
     )
+
+    # Clean up the temporary subset project directory if it was created
+    if (length(excludeGroups) > 0 && dir.exists(subsetTmpDir)) {
+        print(paste("Removing temporary subset directory:", subsetTmpDir))
+        unlink(subsetTmpDir, recursive = TRUE)
+        print("Temporary subset directory removed")
+    }
     
     # Plot motif deviations on UMAP embedding
     print("Plotting motif deviations on UMAP embedding")
