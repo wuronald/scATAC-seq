@@ -2381,6 +2381,7 @@ plot_homer_dots_binned <- function(df, fdr_cutoff = 0.05, top_n_rank = 60) {
     ) +
     # Color scale (Magma highlights high enrichment well)
     scale_color_viridis_c(option = "magma", direction = -1) +
+    facet_wrap(~ condition, scales = "free_x") +
     theme_bw() +
     labs(
       title = paste("Top", top_n_rank, "Motifs"),
@@ -2403,7 +2404,7 @@ print(final_plot)
 
 # --- Example Usage ---
 # Assuming your table is loaded as 'final_table'
-pdf(here("data","bulkATAC",
+pdf(here("Plots","bulkATAC",
          "2026-04-19_G361_G411_RW492_RW555_pairwise_HOMER_motifs_bubbleplot.pdf"), 
     width = 10, height = 15)
 plot_homer_dots_binned(final_table, fdr_cutoff = 0.05, top_n_rank = 10)
@@ -2486,7 +2487,7 @@ plot_homer_heatmap_annotated <- function(df, fdr_cutoff = 0.05, top_n_rank = 60)
 # hm <- plot_homer_heatmap_annotated(final_table)
 # draw(hm, merge_legend = TRUE)
 
-pdf(here("data","bulkATAC",
+pdf(here("Plots","bulkATAC",
          "2026-04-19_G361_G411_RW492_RW555_pairwise_HOMER_motifs_binaryHeatmap.pdf"), 
     width = 10, height = 15)
 hm <- plot_homer_heatmap_annotated(final_table, fdr_cutoff=0.05, top_n_rank = 10)
@@ -2595,7 +2596,7 @@ my_colors <- list(
 # hm <- plot_homer_heatmap_flexible(df_combined)
 # draw(hm)
 
-pdf(here("data","bulkATAC",
+pdf(here("Plots","bulkATAC",
          "2026-04-19_G361_G411_RW492_RW555_all_normoxia_vs_hypoxia_HOMER_motifs_binaryHeatmap.pdf"), 
     width = 14, height = 10)
 
@@ -3149,7 +3150,7 @@ draw(hm, merge_legend = TRUE)
 ```{r plot and export binary heatmaps, eval = FALSE}
 
 # All three GSCs into one heatmap
-pdf(here("data","bulkATAC",
+pdf(here("Plots","bulkATAC",
          "2026-04-27_G361_G411_G523_combined_HOMER_motifs_binaryHeatmap.pdf"), 
     width = 10, height = 14)
 plot_homer_heatmap(G361_G411_G523_final_table, fdr_cutoff = 0.05, top_n_rank = 10,
@@ -3201,7 +3202,7 @@ plot_homer_heatmap_freq(G361_G411_G523_final_table_filtered_deseq2, fdr_cutoff =
 dev.off()
 
 # With rowAnnotation of human_multiome PIMOup_vs_PIMOdown motifs
-pdf(here("data","bulkATAC",
+pdf(here("Plots","bulkATAC",
          "2026-04-27_G361_G411_G523_combined_HOMER_motifs_vs_human_multiome_PIMOup_vs_PIMOdown_binaryHeatmap.pdf"), 
     width = 10, height = 14)
 
@@ -3409,7 +3410,7 @@ dev.off()
 
 
 # G361/G411 or G523 binary heatmap of pairwise conditions
-pdf(here("data","bulkATAC",
+pdf(here("Plots","bulkATAC",
          "2026-04-27_G361_G411_G523_HOMER_motifs_binaryHeatmap.pdf"), 
     width = 10, height = 14)
 # G361 and G411
