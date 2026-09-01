@@ -531,6 +531,24 @@ write_csv(
   )
 )
 
+write_csv(
+  motifsUp_PIMOupEBvsPIMOdownEB.df_cleaned,
+  here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB",
+    "motifsUp_PIMORegion_PIMOupEBvsPIMOdownEB_homer.csv"
+  )
+)
+write_csv(
+  motifsDown_PIMOupEBvsPIMOdownEB.df_cleaned,
+  here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB",
+    "motifsDown_PIMORegion_PIMOupEBvsPIMOdownEB_homer.csv"
+  )
+)
 ```
 
 # Summarize significant motifs and compare across PIMO_Region conditions
