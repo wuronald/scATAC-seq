@@ -181,37 +181,31 @@ markersTest_gr <- readRDS(
     "markersTest_GR_PIMO_up_status_PIMOup_vs_PIMOdown.rds"
   )
 )
+
+# For k3_program: (non-pairwise testing; each program vs all others)
+
+hmmp_k3_markersPeaks <- readRDS(
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_k3_program",
+    "peakCalls",
+    "markersPeaks_k3_program.rds"
+  )
+)
+
+# GR
+hmmp_k3_markersPeaks_GR <- readRDS(
+  here(
+    "data",
+    "human_multiome",
+    "human_multiome_hmmp_k3_program",
+    "peakCalls",
+    "markersPeaks_GR_k3_program.rds"
+  )
+)
 ```
 
-
-```{r eda on markerspeaks/markersTest}
-# EDA on markerTest peaks
-markersTest # dim: 179499 1
-markersTest_gr$PIMOup # 178910
-
-edaPeaks <- function(gr){
-cat("number of ranges:", length(gr),"\n")
-
-up <- subset(gr, FDR <= 0.1 & Log2FC >= 0.5) %>%
-  length()
-down <- subset(gr, FDR <= 0.1 & Log2FC <= -0.5) %>%
-  length()
-cat("threshold", "FDR <= 0.1 & Log2FC >= 0.5\n")
-cat("number of up/open peaks:", up,"\n")
-cat("threshold", "FDR <= 0.1 & Log2FC <= -0.5\n")
-cat("number of down/closed peaks:", down,"\n")
-}
-
-
-
-edaPeaks(markersTest_gr$PIMOup)
-
-# Differentially Accessible Peaks
-sapply(assays(markersTest), function(x) sum(is.na(x)))
-```
-markersTest vs markersTest_gr:
-179499 vs 178910
--why is 589 peak difference? FDR has 589 NAs!, which is removed in the gr.
 ## Gaiti_multiome
 The markersTest files were originally made incorrectly with the peakCalling script, and run_05b_Gaiti_multiome_pairwiseTesting.sh was used to assign the proper peakSet to generate the correct pairwise results.
 ```{r load markerPeaks/markersTest gaiti}
@@ -241,7 +235,63 @@ markersTest_gr_PIMOup_TC_vs_PIMOdown_TC <- readRDS(
 )
 sapply(assays(markersTest_PIMOup_TC_vs_PIMOdown_TC), function(x) sum(is.na(x)))
 edaPeaks(markersTest_gr_PIMOup_TC_vs_PIMOdown_TC$PIMOup)
+
+
+# For PIMOup_TC_vs_PIMOdown_TC (useGroups=PIMOup_TC, bgdGroups = PIMOdown_TC)
+# GR
+markersTest_gr_PIMOup_EB_vs_PIMOdown_EB <- readRDS(
+  here(
+    "data",
+    "Gaiti_multiome",
+    "Gaiti_multiome_harmony_merged_malig_peak",
+    "PeakCalls",
+    "2026-04-06",
+    "markersTest_GR_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB.rds"
+  )
+)
 ```
+
+## eda on marker peaks or marker test
+```{r eda on markerspeaks/markersTest}
+# EDA on markerTest peaks
+markersTest # dim: 179499 1
+markersTest_gr$PIMOup # 178910
+
+edaPeaks <- function(gr){
+cat("number of ranges:", length(gr),"\n")
+
+up <- subset(gr, FDR <= 0.1 & Log2FC >= 0.5) %>%
+  length()
+down <- subset(gr, FDR <= 0.1 & Log2FC <= -0.5) %>%
+  length()
+cat("threshold", "FDR <= 0.1 & Log2FC >= 0.5\n")
+cat("number of up/open peaks:", up,"\n")
+cat("threshold", "FDR <= 0.1 & Log2FC <= -0.5\n")
+cat("number of down/closed peaks:", down,"\n")
+}
+
+
+
+edaPeaks(markersTest_gr$PIMOup)
+
+# Differentially Accessible Peaks
+sapply(assays(markersTest), function(x) sum(is.na(x)))
+
+# EDA on markerPeaks from k3_program
+hmmp_k3_markersPeaks # dim: 58477 3
+hmmp_k3_markersPeaks_GR$program_1
+  
+edaPeaks(hmmp_k3_markersPeaks_GR$program_1) 
+edaPeaks(hmmp_k3_markersPeaks_GR$program_2)
+edaPeaks(hmmp_k3_markersPeaks_GR$program_3)
+
+# EDA on markerTest for PIMO_region
+edaPeaks(markersTest_gr_PIMOup_TC_vs_PIMOdown_TC$PIMOup_TC)
+edaPeaks(markersTest_gr_PIMOup_EB_vs_PIMOdown_EB$PIMOup_EB)
+```
+markersTest vs markersTest_gr:
+179499 vs 178910
+-why is 589 peak difference? FDR has 589 NAs!, which is removed in the gr.
 
 # Load motifEnrichment: motifsUp and motifsDown
 ## human_multiome:
@@ -254,10 +304,8 @@ motifsUp_homer.df_cleaned <- read_csv(
     "motifEnrichment_homer_PIMO_up_status",
     "motifsUp_PIMO_up_status_PIMOup_vs_PIMOdown_homer.csv"
   )
-) %>% # additional cleaning for excel export
-  dplyr::select(c(-TF, -TF_fixed)) %>%
-  rename(TF = TF_cleaned) %>%
-  relocate(TF, .before = 1)
+) %>% # rename and move the cleaned column to the start and keep only relevent columns
+dplyr::select(TF = TF_cleaned, mlog10Padj, rank, TF_family)
 
 motifsDown_homer.df_cleaned <- read_csv(
   here(
@@ -266,10 +314,8 @@ motifsDown_homer.df_cleaned <- read_csv(
     "motifEnrichment_homer_PIMO_up_status",
     "motifsDown_PIMO_up_status_PIMOup_vs_PIMOdown_homer.csv"
   )
-) %>% # additional cleaning for excel export
-  dplyr::select(c(-TF, -TF_fixed)) %>%
-  rename(TF = TF_cleaned) %>%
-  relocate(TF, .before = 1)
+) %>% # rename and move the cleaned column to the start and keep only relevent columns
+dplyr::select(TF = TF_cleaned, mlog10Padj, rank, TF_family)
 ```
 ### k3_program
 Note: Extra column called `group` that has program_1, program_2, program_3
@@ -283,10 +329,8 @@ k3_motifsUp.df_cleaned <- read_csv(
     "motifEnrichment_homer_k3_program",
     "motifsUp_k3program_homer.csv"
   )
-) %>% # additional cleaning for excel export
-  dplyr::select(c(-TF, -TF_fixed)) %>%
-  rename(TF = TF_cleaned) %>%
-  relocate(TF, .before = 1)
+) %>% # rename and move the cleaned column to the start and keep only relevent columns
+dplyr::select(TF = TF_cleaned, group, mlog10Padj, rank, TF_family)
 
 k3_motifsDown.df_cleaned <-
   read_csv(
@@ -297,10 +341,8 @@ k3_motifsDown.df_cleaned <-
     "motifEnrichment_homer_k3_program",
     "motifsDown_k3program_homer.csv"
   )
-) %>% # additional cleaning for excel export
-  dplyr::select(c(-TF, -TF_fixed)) %>%
-  rename(TF = TF_cleaned) %>%
-  relocate(TF, .before = 1)
+) %>% # rename and move the cleaned column to the start and keep only relevent columns
+dplyr::select(TF = TF_cleaned, group, mlog10Padj, rank, TF_family)
 ```
 
 ### meta_module (nomura states)
@@ -315,10 +357,8 @@ nomura_motifsUp.df_cleaned <- read_csv(
     "motifEnrichment_homer_meta_module",
     "motifsUp_meta_module_homer.csv"
   )
-) %>% # additional cleaning for excel export
-  dplyr::select(c(-TF, -TF_fixed)) %>%
-  rename(TF = TF_cleaned) %>%
-  relocate(TF, .before = 1)
+) %>% # rename and move the cleaned column to the start and keep only relevent columns
+dplyr::select(TF = TF_cleaned, group, mlog10Padj, rank, TF_family)
 
 nomura_motifsDown.df_cleaned <- read_csv(
   here(
@@ -328,10 +368,8 @@ nomura_motifsDown.df_cleaned <- read_csv(
     "motifEnrichment_homer_meta_module",
     "motifsDown_meta_module_homer.csv"
   )
-) %>% # additional cleaning for excel export
-  dplyr::select(c(-TF, -TF_fixed)) %>%
-  rename(TF = TF_cleaned) %>%
-  relocate(TF, .before = 1)
+) %>% # rename and move the cleaned column to the start and keep only relevent columns
+dplyr::select(TF = TF_cleaned, group, mlog10Padj, rank, TF_family)
 ```
 
 ## Gaiti_multiome:
@@ -345,10 +383,8 @@ motifsUp_PIMOupTCvsPIMOdownTC.df_cleaned <- read_csv(
     "motifEnrichment_homer_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC",
     "motifsUp_PIMORegion_PIMOupTCvsPIMOdownTC_homer.csv"
   )
-) %>% # additional cleaning for excel export
-  dplyr::select(c(-TF, -TF_fixed)) %>%
-  rename(TF = TF_cleaned) %>%
-  relocate(TF, .before = 1)
+) %>% # rename and move the cleaned column to the start and keep only relevent columns
+dplyr::select(TF = TF_cleaned, mlog10Padj, rank, TF_family)
 
 motifsDown_PIMOupTCvsPIMOdownTC.df_cleaned <- read_csv(
   here(
@@ -357,10 +393,28 @@ motifsDown_PIMOupTCvsPIMOdownTC.df_cleaned <- read_csv(
     "motifEnrichment_homer_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC",
     "motifsDown_PIMORegion_PIMOupTCvsPIMOdownTC_homer.csv"
   )
-) %>% # additional cleaning for excel export
-  dplyr::select(c(-TF, -TF_fixed)) %>%
-  rename(TF = TF_cleaned) %>%
-  relocate(TF, .before = 1)
+) %>% # rename and move the cleaned column to the start and keep only relevent columns
+dplyr::select(TF = TF_cleaned, mlog10Padj, rank, TF_family)
+
+motifsUp_PIMOupEBvsPIMOdownEB.df_cleaned <- read_csv(
+  here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB",
+    "motifsUp_PIMORegion_PIMOupEBvsPIMOdownEB_homer.csv"
+  )
+) %>% # rename and move the cleaned column to the start and keep only relevent columns
+dplyr::select(TF = TF_cleaned, mlog10Padj, rank, TF_family)
+
+motifsDown_PIMOupEBvsPIMOdownEB.df_cleaned <- read_csv(
+  here(
+    "data",
+    "Gaiti_multiome",
+    "motifEnrichment_homer_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB",
+    "motifsDown_PIMORegion_PIMOupEBvsPIMOdownEB_homer.csv"
+  )
+) %>% # rename and move the cleaned column to the start and keep only relevent columns
+dplyr::select(TF = TF_cleaned, mlog10Padj, rank, TF_family)
 ```
 
 # peakSet to excel
@@ -466,7 +520,8 @@ export_master_excel <- function(gr_list, extra_sheets = NULL, file_path, workboo
                   length(gr_list), extra_len, file_path))
 }
 ```
-## export supplemental table 5 human multiome
+
+## export supplemental table 9 human multiome
 ```{r useage, eval = FALSE}
 # optional: Package the motifs into a named list
 
@@ -474,13 +529,13 @@ motif_sheets <- list(
   "PIMO_up_status_motifsUp" = motifsUp_homer.df_cleaned,
   "PIMO_up_status_motifsDown" = motifsDown_homer.df_cleaned,
   "k3_program_motifsUp" = k3_motifsUp.df_cleaned,
-  "k3_program_motifsDown" = k3_motifsDown.df_cleaned,
-  "nomura_motifsUp" = nomura_motifsUp.df_cleaned,
-  "nomura_motifsDown" = nomura_motifsUp.df_cleaned
+  "k3_program_motifsDown" = k3_motifsDown.df_cleaned
+  #"nomura_motifsUp" = nomura_motifsUp.df_cleaned,
+  #"nomura_motifsDown" = nomura_motifsUp.df_cleaned
 )
 
-# 3. Package your GRanges objects into a named list 
-# (Using your existing PIMO_up_status as the base)
+# Package GRanges objects into a named list 
+
 my_gr_list <- list(
   "PIMO_up_status_peakSet" = peakSet_PIMO_up_status,
   "PIMO_up_status_DAR_up" = subset(markersTest_gr$PIMOup, FDR <= 0.1 &
@@ -488,10 +543,22 @@ my_gr_list <- list(
   "PIMO_up_status_DAR_down" = subset(markersTest_gr$PIMOup, FDR <= 0.1 &
                                        Log2FC <= -0.5),
   "k3_program_peakSet" = peakSet_k3_program,
-  "nomura_peakSet" = peakSet_meta_module
+  "k3_program_1_DARup" = subset(hmmp_k3_markersPeaks_GR$program_1, 
+                                FDR<=0.1 & Log2FC >= 0.5),
+  "k3_program_1_DARdown" = subset(hmmp_k3_markersPeaks_GR$program_1, 
+                                FDR<=0.1 & Log2FC <= -0.5),
+  "k3_program_2_DARup" = subset(hmmp_k3_markersPeaks_GR$program_2, 
+                                FDR<=0.1 & Log2FC >= 0.5),
+  "k3_program_2_DARdown" = subset(hmmp_k3_markersPeaks_GR$program_2, 
+                                FDR<=0.1 & Log2FC <= -0.5),
+  "k3_program_3_DARup" = subset(hmmp_k3_markersPeaks_GR$program_3, 
+                                FDR<=0.1 & Log2FC >= 0.5),
+  "k3_program_3_DARdown" = subset(hmmp_k3_markersPeaks_GR$program_3, 
+                                FDR<=0.1 & Log2FC <= -0.5)
+# "nomura_peakSet" = peakSet_meta_module
 )
 
-# 4. Export the consolidated workbooks
+# Export the consolidated workbooks
 
 # human_multiome:
 export_master_excel(
@@ -500,29 +567,33 @@ export_master_excel(
   file_path = here(
     "figures", 
     "supplemental_table", 
-    "Supplementary_table_5.xlsx"
+    "Supplementary_table_9.xlsx"
   ),
-  workbook_description = "This workbook contains consensus peak sets and enriched motifs for the human multiome dataset. The associated tables were generated for each group of interest: PIMO_up_status, k3_program, and nomura"
+  workbook_description = "This workbook contains consensus peak sets, differentially accessible regions (DARs), and enriched motifs for the human multiome dataset. The associated tables were generated for each group of interest: PIMO_up_status and k3_program. For k3_program, program_1, program_2, and program_3 refer to the EGFR/HIF(RTK), Connective and Reactive programs respectively as mentioned in the main text. For DARs, only significant peak regions are shown if any."
 )
-
-
 
 ```
 
-## export supplementary table 6 Gaiti multiome
-```{r useage supplementary table 6, eval = FALSE}
+## export supplementary table 10 Gaiti multiome
+```{r useage supplementary table 10, eval = FALSE}
 motif_sheets <- list(
   "PIMOupTCvsPIMOdownTCmotifsUp" = motifsUp_PIMOupTCvsPIMOdownTC.df_cleaned,
-  "PIMOupTCvsPIMOdownTCmotifsDown" = motifsDown_PIMOupTCvsPIMOdownTC.df_cleaned
+  "PIMOupTCvsPIMOdownTCmotifsDown" = motifsDown_PIMOupTCvsPIMOdownTC.df_cleaned,
+  "PIMOupEBvsPIMOdownEBmotifsUp" = motifsUp_PIMOupEBvsPIMOdownEB.df_cleaned,
+  "PIMOupEBvsPIMOdownEBmotifsDown" = motifsDown_PIMOupEBvsPIMOdownEB.df_cleaned
 )
 
 # gaiti_multiome
 export_master_excel(
   gr_list = list(
     "PIMO_Region_peakSet" = peakSet_PIMO_Region_Gaiti,
-    "PIMO_Region_DAR_up" = subset(markersTest_gr_PIMOup_TC_vs_PIMOdown_TC$PIMOup, FDR <= 0.1 &
+    "PIMOupTCvsPIMOdownTC_DAR_up" = subset(markersTest_gr_PIMOup_TC_vs_PIMOdown_TC$PIMOup_TC, FDR <= 0.1 &
                                      Log2FC >= 0.5),
-    "PIMO_Region_DAR_down" = subset(markersTest_gr_PIMOup_TC_vs_PIMOdown_TC$PIMOup, FDR <= 0.1 &
+    "PIMOupTCvsPIMOdownTC_DAR_down" = subset(markersTest_gr_PIMOup_TC_vs_PIMOdown_TC$PIMOup_TC, FDR <= 0.1 &
+                                       Log2FC <= -0.5),
+    "PIMOupEBvsPIMOdownEB_DAR_up" = subset(markersTest_gr_PIMOup_EB_vs_PIMOdown_EB$PIMOup_EB, FDR <= 0.1 &
+                                     Log2FC >= 0.5),
+    "PIMOupEBvsPIMOdownEB_DAR_down" = subset(markersTest_gr_PIMOup_EB_vs_PIMOdown_EB$PIMOup_EB, FDR <= 0.1 &
                                        Log2FC <= -0.5),
     "PIMO_up_status_peakSet" = peakSet_PIMO_up_status_Gaiti,
     "Region.annotation_peakSet" = peakSet_Region.annotation_Gaiti
@@ -531,9 +602,9 @@ export_master_excel(
   file_path = here(
     "figures", 
     "supplemental_table", 
-    "Supplementary_table_6.xlsx"
+    "Supplementary_table_10.xlsx"
   ),
-  workbook_description = "This workbook contains consensus peak sets and enriched motifs for the Wu et al dataset (Gaiti multiome). The associated tables were generated for each group of interest: PIMO_Region, PIMO_up_status, and Region.annotation"
+  workbook_description = "This workbook contains consensus peak sets, differentially accessible regions (DARs), and enriched motifs for the Wu et al dataset (Gaiti multiome). The associated tables were generated for each group of interest: PIMO_Region, PIMO_up_status, and Region.annotation. The PIMO_Region group is made combining PIMO_up_status and Region.annotation. For PIMO_region DARs, only the significant peak regions are shown for the indicated pairwise comparison. PT region is excluded due to lack of significant DARs."
 )
 
 ```
