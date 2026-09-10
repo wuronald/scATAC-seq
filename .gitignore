@@ -48,6 +48,8 @@ tmp/
 *.RData
 *.rda
 *.rds
+*.csv
+*.tsv
 
 # Plots & exported media
 *.pdf
