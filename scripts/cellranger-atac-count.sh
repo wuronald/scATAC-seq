@@ -6,14 +6,20 @@
 #SBATCH -c 12
 #SBATCH -N 1
 #SBATCH -o %x-%j.out
+# ==============================================================================
+# Purpose: SLURM batch submission script to run 10x Genomics 'cellranger-atac count'
+#          for single-cell ATAC-seq FASTQ processing (alignment, barcode counting,
+#          peak calling, and fragment file generation against GRCh38 reference).
+# Referenced in: Guilhamon_preprocessing.Rmd
+#
+# Positional Arguments:
+#   $1 = Sample / output folder ID (e.g., GBM_4218)
+#   $2 = Path to directory containing sample FASTQ files (e.g., fastq/GBM_4218)
+# ==============================================================================
 
 ## uncomment the following line if encountering 'resource unavailable' errors
 ## despite using --localcores and --localmem
 # ulimit -u 4096
-
-# Arguments
-# $1 = the id name of the output folder
-# $2 = folder where the fastq files are for the given sample
 
 
 # load cellranger-atac

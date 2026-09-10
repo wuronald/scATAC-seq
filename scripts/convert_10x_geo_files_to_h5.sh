@@ -9,6 +9,15 @@
 #SBATCH --mem=30G
 #SBATCH --time=03:00:00
 
+# ==============================================================================
+# Purpose: SLURM batch job to convert downloaded GEO multiome matrix triplets
+#          (barcodes, features, matrix) into 10x-compliant HDF5 (.h5) files
+#          with hg38 genomic intervals for Gaiti et al. samples, then import
+#          them into ArchR as Arrow files.
+# Input:   GEO download directories in 'geo_downloads/' (from geo_download_script.sh)
+# Output:  filtered_feature_bc_matrix.h5 per sample + ArchR Arrow files
+# ==============================================================================
+
 # Load necessary modules (adjust as needed for your system)
 module load R/4.1.0
 

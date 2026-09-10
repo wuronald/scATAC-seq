@@ -1,0 +1,191 @@
+#!/bin/bash
+# ==============================================================================
+# Purpose: Local Mac script to convert downloaded GEO multiome matrix triplets
+#          (barcodes, features, matrix) into 10x-compliant HDF5 (.h5) files
+#          with hg38 genomic intervals for Gaiti et al. samples.
+# Input:   GEO download directories in '/Users/wuronald/Downloads/geo_downloads'
+# Output:  filtered_feature_bc_matrix.h5 per sample
+# Note:    Local version of convert_10x_geo_files_to_h5.sh without SLURM headers
+#          or automatic ArchR import.
+# ==============================================================================
+
+# Run R script
+Rscript - <<'EOF'
+library(DropletUtils)
+library(Seurat)
+
+# Define the base directory containing sample subdirectories
+base_dir <- "/Users/wuronald/Downloads/geo_downloads"
+
+# List of sample names
+samples <- c(
+    "GSM8820702_6419_A",
+    "GSM8820703_6419_B",
+    "GSM8820704_6419_C",
+    "GSM8820705_6419_D",
+    "GSM8820706_6425_A",
+    "GSM8820707_6425_C",
+    "GSM8820708_6425_D",
+    "GSM8820709_6425_E",
+    "GSM8820710_6425_F",
+    "GSM8820711_6425_G",
+    "GSM8820712_6434_A",
+    "GSM8820713_6467_A",
+    "GSM8820714_6467_B",
+    "GSM8820715_6467_C",
+    "GSM8820716_6467_D",
+    "GSM8820717_6467_E",
+    "GSM8820718_6467_F",
+    "GSM8820719_6509_A",
+    "GSM8820720_6509_B",
+    "GSM8820721_6509_C",
+    "GSM8820722_6509_D",
+    "GSM8820723_6509_E",
+    "GSM8820724_6514_A",
+    "GSM8820725_6514_B",
+    "GSM8820726_6514_C",
+    "GSM8820727_6514_D"
+)
+
+# Counter for progress
+total_samples <- length(samples)
+current <- 0
+
+cat("Converting 10X matrices to HDF5 format...\n")
+cat("Base directory:", base_dir, "\n\n")
+
+# Vector to store HDF5 file paths
+h5_files <- c()
+
+# Loop through each sample
+for (sample in samples) {
+    current <- current + 1
+    
+    cat(sprintf("[%d/%d] Processing %s...\n", current, total_samples, sample))
+    
+    # Define input directory path
+    input_dir <- file.path(base_dir, sample)
+    
+    # Check if directory exists
+    if (!dir.exists(input_dir)) {
+        cat("  ✗ Directory not found:", input_dir, "\n\n")
+        next
+    }
+    
+    # Original files with sample prefix
+    original_files <- c(
+        barcodes = file.path(input_dir, paste0(sample, "_barcodes.tsv.gz")),
+        features = file.path(input_dir, paste0(sample, "_features.tsv.gz")),
+        matrix = file.path(input_dir, paste0(sample, "_matrix.mtx.gz"))
+    )
+    
+    missing_files <- !file.exists(original_files)
+    if (any(missing_files)) {
+        cat("  ✗ Missing files:\n")
+        for (f in original_files[missing_files]) {
+            cat("    -", basename(f), "\n")
+        }
+        cat("\n")
+        next
+    }
+    
+    # Standard 10X names (create symlinks)
+    standard_files <- c(
+        barcodes = file.path(input_dir, "barcodes.tsv.gz"),
+        features = file.path(input_dir, "features.tsv.gz"),
+        matrix = file.path(input_dir, "matrix.mtx.gz")
+    )
+    
+    cat("  Creating symbolic links...\n")
+    for (i in seq_along(original_files)) {
+        if (file.exists(standard_files[i])) {
+            file.remove(standard_files[i])
+        }
+        file.symlink(basename(original_files[i]), standard_files[i])
+    }
+    
+    # Try to read and convert the matrix
+    tryCatch({
+        cat("  Reading 10X matrix...\n")
+        data_10x <- Read10X(input_dir)
+        print(paste0("the 10x matrix is of class: ", class(data_10x)))
+
+        # Check if it's multimodal and extract modalities
+        if (is.list(data_10x) && !is.data.frame(data_10x)) {
+            cat("  Detected multimodal data\n")
+            
+            if ("Gene Expression" %in% names(data_10x)) {
+                cat("  Extracting 'Gene Expression' modality...\n")
+                gene_expr_matrix <- data_10x[["Gene Expression"]]
+                cat("  Extracting 'Peaks' modality...\n")
+                peaks_matrix <- data_10x[["Peaks"]]
+            } else {
+                cat("  ✗ 'Gene Expression' modality not found\n")
+                cat("  Available modalities:", paste(names(data_10x), collapse=", "), "\n\n")
+                next
+            }
+        } else {
+            gene_expr_matrix <- data_10x
+        }
+
+        # Combine gene_expr and peaks matrices
+        combined_matrix <- rbind(gene_expr_matrix, peaks_matrix)
+        combined_ids <- c(
+            rownames(gene_expr_matrix),
+            rownames(peaks_matrix)
+        )
+
+        combined_symbols <- c(
+            rownames(gene_expr_matrix),
+            rownames(peaks_matrix)
+        )
+        feature_types <- c(
+            rep("Gene Expression", nrow(gene_expr_matrix)),
+            rep("Peaks", nrow(peaks_matrix))
+        )
+        
+        # Source the helper script with absolute path
+        source("/Users/wuronald/Library/CloudStorage/Dropbox-WKLab/Ronald Wu/_wouters lab/Data Ronald/scATAC-seq/scripts/write10x_with_intervals.R")
+
+        # Get gene ranges (hg38)
+        gene_ranges <- get_gene_ranges("hg38")
+
+        output_h5 <- file.path(input_dir, "filtered_feature_bc_matrix.h5")
+        print("Write 10x counts with intervals for hg38")
+        write10xCounts_with_intervals(
+            path = output_h5,
+            counts = combined_matrix,
+            gene.id = combined_ids,
+            gene.symbol = combined_symbols,
+            barcodes = colnames(combined_matrix),
+            genome = "hg38",
+            gene.ranges = gene_ranges
+        )    
+
+        cat("  ✓ Success! Output:", output_h5, "\n")
+        h5_files <- c(h5_files, output_h5)
+        
+        # Clean up symbolic links
+        for (link_file in standard_files) {
+            if (file.exists(link_file)) {
+                file.remove(link_file)
+            }
+        }
+        
+    }, error = function(e) {
+        cat("  ✗ Error processing sample:", conditionMessage(e), "\n")
+        # Clean up symbolic links even on error
+        for (link_file in standard_files) {
+            if (file.exists(link_file)) {
+                file.remove(link_file)
+            }
+        }
+    })
+    
+    cat("\n")
+}
+
+cat("HDF5 conversion complete!\n")
+cat(sprintf("Successfully created %d HDF5 files\n\n", length(h5_files)))
+cat("\nDone!\n")
+EOF

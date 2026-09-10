@@ -9,6 +9,17 @@
 #SBATCH --mem=60G
 #SBATCH --time=02:00:00
 
+# ==============================================================================
+# Purpose: SLURM batch script to compute transcription factor (TF) motif
+#          deviations using chromVAR in ArchR for Gaiti multiome datasets.
+# Key Features:
+#   1. Computes chromVAR deviation z-scores for specified motif databases (HOMER, CIS-BP, JASPAR).
+#   2. Dynamic metadata column concatenation (COMBINE_COLUMNS) and group exclusion (EXCLUDE_GROUPS).
+#   3. Robust 3-tier hierarchical PeakSet resolution (current groupBy -> base groupBy -> embedded project peakSet).
+#   4. Generates deviation variability plots, group violin/ridge plots, and UMAP embeddings with imputation.
+#   5. Identifies putative positive TF regulators by correlating motif deviations with TF gene expression.
+# ==============================================================================
+
 # Parse command line arguments
 # First argument:  motif set (homer, encode, JASPAR2020, JASPAR2018, JASPAR2016, cisbp)
 # Second argument: groupBy variable (e.g., "PIMO_up_status", "PIMO_Region", "Region.annotation")
@@ -63,6 +74,7 @@ set.seed(1)
 # Get parameters from environment variables
 motifSet          <- Sys.getenv("MOTIF_SET",          unset = "homer")
 groupBy           <- Sys.getenv("GROUP_BY",           unset = "PIMO_Region")
+initialGroupBy    <- groupBy  # Store initial groupBy before any metadata combination
 archrProject      <- Sys.getenv("ARCHR_PROJECT",      unset = "Gaiti_multiome_harmony_merged_malig_peak")
 motifsOfInterest  <- Sys.getenv("MOTIFS_OF_INTEREST", unset = "SOX,HIF,ARNT,NF1,NFI")
 excludeGroupsEnv  <- Sys.getenv("EXCLUDE_GROUPS",     unset = "")
@@ -78,7 +90,7 @@ excludeGroups <- if (nchar(excludeGroupsEnv) > 0) trimws(unlist(strsplit(exclude
 combineCols <- if (nchar(combineColumnsEnv) > 0) trimws(unlist(strsplit(combineColumnsEnv, ","))) else character(0)
 
 cat("Using motifSet:", motifSet, "\n")
-cat("Using initial groupBy:", groupBy, "\n")
+cat("Using initial groupBy:", initialGroupBy, "\n")
 cat("Using ArchR project:", archrProject, "\n")
 cat("Motifs of interest:", paste(moi, collapse = ", "), "\n")
 cat("Exclude groups from plotGroups:", if (length(excludeGroups) > 0) paste(excludeGroups, collapse = ", ") else "none", "\n")
@@ -137,26 +149,45 @@ annoName <- paste0("Motif_", motifSet)
 outDir <- here(paste0(archrProject, "/chromVarDeviations_", motifSet, "_", groupBy, "/"))
 dir.create(outDir, showWarnings = FALSE, recursive = TRUE)
 
-# Load and assign appropriate PeakSet based on groupBy
-peakSetPath <- paste0("/cluster/projects/wouterslab/ArchR103_4/", archrProject, "/PeakCalls/PeakSet_gr_", groupBy, ".rds")
-print(paste("Loading PeakSet from:", peakSetPath))
+# ─── Load PeakSet with 3-tier hierarchical resolution ─────────────────────────
+# Tier 1: PeakSet for current groupBy (e.g. combined_program_Region.annotation if combined)
+# Tier 2: PeakSet for initial groupBy (e.g. combined_program)
+# Tier 3: Pre-existing embedded peakSet in ArchR project (proj@peakSet)
 
-if (file.exists(peakSetPath)) {
-    peakSet_gr <- readRDS(peakSetPath)
-    print(paste("PeakSet loaded successfully for", groupBy))
-    
-    # Add the PeakSet to the ArchR project
-    proj <- addPeakSet(
-        ArchRProj = proj,
-        peakSet = peakSet_gr,
-        force = TRUE
-    )
-    print("PeakSet added to ArchR project")
-} else {
+candidatePaths <- character(0)
+# Candidate 1: current groupBy
+candidatePaths <- c(candidatePaths, paste0("/cluster/projects/wouterslab/ArchR103_4/", archrProject, "/PeakCalls/PeakSet_gr_", groupBy, ".rds"))
+
+# Candidate 2: initial groupBy (if different from current groupBy)
+if (initialGroupBy != groupBy) {
+    candidatePaths <- c(candidatePaths, paste0("/cluster/projects/wouterslab/ArchR103_4/", archrProject, "/PeakCalls/PeakSet_gr_", initialGroupBy, ".rds"))
+}
+candidatePaths <- unique(candidatePaths)
+
+loadedPeakSet <- FALSE
+for (peakSetPath in candidatePaths) {
+    print(paste("Checking for PeakSet at:", peakSetPath))
+    if (file.exists(peakSetPath)) {
+        peakSet_gr <- readRDS(peakSetPath)
+        print(paste("✓ PeakSet loaded successfully from:", peakSetPath))
+        
+        # Add the PeakSet to the ArchR project
+        proj <- addPeakSet(
+            ArchRProj = proj,
+            peakSet = peakSet_gr,
+            force = TRUE
+        )
+        print("✓ PeakSet added to ArchR project")
+        loadedPeakSet <- TRUE
+        break
+    }
+}
+
+if (!loadedPeakSet) {
     if (!is.null(proj@peakSet) && length(proj@peakSet) > 0) {
-        print(paste("Warning: PeakSet file not found at", peakSetPath, "- proceeding with existing peakSet in ArchR project (", length(proj@peakSet), "peaks)"))
+        print(paste("Warning: No candidate PeakSet .rds files found on disk - proceeding with existing peakSet embedded in ArchR project (", length(proj@peakSet), "peaks)"))
     } else {
-        stop(paste("PeakSet file not found:", peakSetPath, "and no peakSet exists in ArchR project."))
+        stop(paste0("Error: No candidate PeakSet files found in:\n  ", paste(candidatePaths, collapse = "\n  "), "\nand no peakSet exists in ArchR project."))
     }
 }
 

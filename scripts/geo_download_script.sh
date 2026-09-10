@@ -1,4 +1,11 @@
 #!/bin/bash
+# ==============================================================================
+# Purpose: Downloads 10x Multiome supplementary files from NCBI GEO FTP for 26
+#          glioblastoma samples (GSM8820702 - GSM8820727; Wu et al.).
+# Downloads: barcodes.tsv.gz, features.tsv.gz, matrix.mtx.gz, atac_fragments.tsv.gz
+# Output:  Saved into sample-specific folders under 'geo_downloads/'
+# Next steps: Processed by scripts/convert_10x_geo_files_to_h5.sh for ArchR/Seurat
+# ==============================================================================
 
 # List of samples (extracted from atac_fragments filenames)
 samples=(
@@ -34,7 +41,7 @@ samples=(
 base_url="https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8820nnn"
 
 # Files to download for each sample
-file_types=("barcodes.tsv.gz" "features.tsv.gz" "matrix.mtx.gz")
+file_types=("barcodes.tsv.gz" "features.tsv.gz" "matrix.mtx.gz" "atac_fragments.tsv.gz")
 
 # Create output directory if it doesn't exist
 output_dir="geo_downloads"
@@ -63,18 +70,28 @@ for sample in "${samples[@]}"; do
     
     # Download each file type
     for file_type in "${file_types[@]}"; do
+        # Output filename (without URL encoding)
+        output_file="$sample_dir/${sample}_${file_type}"
+        
+        # Check if the file already exists
+        if [ -f "$output_file" ]; then
+            echo "  - Already exists: $file_type"
+            continue
+        fi
+        
         # Construct the filename with URL encoding (%5F for underscore)
         encoded_filename="${sample//_/%5F}_${file_type}"
         
         # Construct the full URL
         url="$base_url/$gsm_id/suppl/$encoded_filename"
         
-        # Output filename (without URL encoding)
-        output_file="$sample_dir/${sample}_${file_type}"
-        
         # Download the file
         echo "  Downloading $file_type..."
-        wget -q -O "$output_file" "$url"
+        if command -v wget >/dev/null 2>&1; then
+            wget -q -O "$output_file" "$url"
+        else
+            curl -s -L -o "$output_file" "$url"
+        fi
         
         if [ $? -eq 0 ]; then
             echo "    ✓ Success: $file_type"

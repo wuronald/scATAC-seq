@@ -9,6 +9,18 @@
 #SBATCH --mem=60G
 #SBATCH --time=02:00:00
 
+# ==============================================================================
+# Purpose: SLURM batch script to score gene signature enrichment via AUCell
+#          on the mouse multiome ArchR dataset (mouse_multiome_harmony_merged_subset).
+# Workflow:
+#   1. Loads ArchR project and extracts/caches GeneExpressionMatrix.
+#   2. Loads gene signatures (Neftel glioblastoma states, PIMO hypoxia signature).
+#   3. Computes single-cell rankings and AUC scores using AUCell.
+#   4. Determines signature thresholds and exports diagnostic PDF histograms.
+#   5. Appends binary assignments and numeric AUC scores to ArchR cellColData.
+#   6. Saves updated ArchR project.
+# ==============================================================================
+
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
 
@@ -243,7 +255,7 @@ for (set_name in rownames(auc_matrix)) {
 
 # Save the project 
 print("Saving ArchRProject object")
-saveArchRProject(ArchRProj = proj, outputDirectory = "Terekhanova", load = TRUE)
+saveArchRProject(ArchRProj = proj, outputDirectory = "mouse_multiome_harmony_merged_subset", load = TRUE)
 
 EOF
 
