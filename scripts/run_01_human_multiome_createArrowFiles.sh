@@ -9,6 +9,24 @@
 #SBATCH --mem=60G
 #SBATCH --time=02:00:00
 
+# ==============================================================================
+# Purpose: SLURM batch submission script to create ArchR Arrow files and initialize
+#          the integrated ArchR project for human 10x Multiome data.
+# Workflow:
+#   1. Scans 'data/human_multiome/' for ATAC fragments and RNA H5 matrix pairs.
+#   2. Generates Arrow files using the hg38 genome (minTSS = 4, minFrags = 1000).
+#   3. Initializes ArchRProject and imports scRNA-seq GeneExpressionMatrix.
+#   4. Subsets project to matching cells, computes doublet scores, and filters doublets.
+#   5. Saves processed ArchR project into 'human_multiome/'.
+# Input:   'data/human_multiome/<Sample>/' containing:
+#            - *fragments.tsv.gz & *fragments.tsv.gz.tbi
+#            - filtered_feature_bc_matrix.h5
+# Output:  Arrow files + 'human_multiome/' ArchR project directory
+#
+# Example usage:
+#   sbatch scripts/run_01_human_multiome_createArrowFiles.sh
+# ==============================================================================
+
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
 
@@ -56,12 +74,17 @@ rnaFiles <- list.files(
   full.names = TRUE
 )
 
-# Extract sample names from file paths
-sampleNames <- basename(dirname(atacFiles))
+# Extract sample names from file paths independently
+names(atacFiles) <- basename(dirname(atacFiles))
+names(rnaFiles)  <- basename(dirname(rnaFiles))
 
-# Name the files with sample names
-names(atacFiles) <- sampleNames
-names(rnaFiles) <- sampleNames
+# Ensure symmetric sample matching
+commonSamples <- intersect(names(atacFiles), names(rnaFiles))
+if (length(commonSamples) == 0) {
+  stop("No matching sample pairs found between ATAC fragments and RNA matrix files.")
+}
+atacFiles <- atacFiles[commonSamples]
+rnaFiles  <- rnaFiles[commonSamples]
 
 # Set genome to hg (human genome)
 addArchRGenome("hg38")
@@ -125,6 +148,9 @@ length(which(getCellNames(projMulti1) %ni% colnames(seRNA)))
 # keep only the cells that are in the RNA data
 print("Keeping cells that are in RNA data")
 cellsToKeep <- which(getCellNames(projMulti1) %in% colnames(seRNA))
+if (length(cellsToKeep) == 0) {
+  stop("No overlapping cells found between RNA data and Arrow files!")
+}
 projMulti2 <- subsetArchRProject(ArchRProj = projMulti1, cells = getCellNames(projMulti1)[cellsToKeep], outputDirectory = "human_multiome", force = TRUE)
 
 # add gene expression matrix to the ArchR project

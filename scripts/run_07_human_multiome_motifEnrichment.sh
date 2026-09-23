@@ -9,19 +9,45 @@
 #SBATCH --mem=32G
 #SBATCH --time=01:30:00
 
-# Parse command line arguments
-# First argument:  motif set      (homer, encode, JASPAR2020, JASPAR2018, JASPAR2016, cisbp)
-# Second argument: groupBy        (e.g., "PIMO_up_status", "hybrid_pair", "k3_program")
-# Third argument:  archr_path     path to ArchR project directory
-# Fourth argument: pairwise       "true" (default when groupBy=PIMO_up_status) or "false"
+# ==============================================================================
+# Purpose: SLURM batch submission script to perform transcription factor (TF)
+#          motif enrichment analysis on differentially accessible / marker peaks
+#          for the Human Multiome ArchR project.
+# Workflow:
+#   1. Loads peak-annotated ArchR project (default: 'human_multiome_harmony_merged_malig_peak/').
+#   2. Loads and attaches the corresponding PeakSet ('PeakSet_gr_<groupBy>.rds').
+#   3. Loads pre-computed differential marker features (pairwise or group-level).
+#   4. Adds motif annotations for the specified motif set (e.g. cisbp, homer, encode, JASPAR).
+#   5. Computes hypergeometric motif enrichment (peakAnnoEnrichment) for upregulated
+#      (FDR <= 0.1 & Log2FC >= 0.5) and downregulated (FDR <= 0.1 & Log2FC <= -0.5) peaks.
+#   6. Exports motif enrichment SummarizedExperiment objects (.rds).
+#   7. Generates rank-ordered TF enrichment ggplot PDFs with ggrepel labels and
+#      heatmaps (plotEnrichHeatmap).
 #
-# Example usage:
+# Usage:
+#   sbatch scripts/run_07_human_multiome_motifEnrichment.sh \
+#       [MOTIF_SET] [GROUP_BY] [ARCHR_PATH] [PAIRWISE]
+#
+# Arguments (all positional, optional):
+#   $1  MOTIF_SET   Motif database (homer, cisbp, encode, JASPAR2020, JASPAR2018, JASPAR2016)
+#                   (default: homer)
+#   $2  GROUP_BY    Metadata column used for peak calling (default: hybrid_pair)
+#   $3  ARCHR_PATH  Path to ArchR project directory
+#                   (default: human_multiome_harmony_merged_malig_peak)
+#   $4  PAIRWISE    Whether to run pairwise mode (true/false)
+#                   (default: true if GROUP_BY=PIMO_up_status, else false)
+#
+# Examples:
+#   # Standard run with HOMER on PIMO_up_status pairwise:
 #   sbatch scripts/run_07_human_multiome_motifEnrichment.sh homer PIMO_up_status
-#   sbatch scripts/run_07_human_multiome_motifEnrichment.sh homer k3_program human_multiome_hmmp_k3_program false
+#
+#   # Non-pairwise k3_program run with CIS-BP:
+#   sbatch scripts/run_07_human_multiome_motifEnrichment.sh cisbp k3_program human_multiome_hmmp_k3_program false
+# ==============================================================================
 
 DEFAULT_ARCHR_PATH="human_multiome_harmony_merged_malig_peak"
 
-MOTIF_SET="${1:-cisbp}"               # Default: cisbp
+MOTIF_SET="${1:-homer}"               # Default: homer
 GROUP_BY="${2:-hybrid_pair}"          # Default: hybrid_pair
 ARCHR_PATH="${3:-${DEFAULT_ARCHR_PATH}}"  # Default: human_multiome_harmony_merged_malig_peak
 
@@ -61,7 +87,7 @@ library(here)
 set.seed(1)
 
 # Get parameters from environment variables
-motifSet  <- Sys.getenv("MOTIF_SET",   unset = "cisbp")
+motifSet  <- Sys.getenv("MOTIF_SET",   unset = "homer")
 groupBy   <- Sys.getenv("GROUP_BY",    unset = "hybrid_pair")
 archrPath <- Sys.getenv("ARCHR_PATH",  unset = "human_multiome_harmony_merged_malig_peak")
 pairwise  <- tolower(Sys.getenv("PAIRWISE", unset = "false")) == "true"
@@ -72,7 +98,7 @@ cat("Using archrPath: ", archrPath, "\n")
 cat("Using pairwise:  ", pairwise,  "\n")
 
 # Set the number of threads for ArchR
-addArchRThreads(threads = 18)
+addArchRThreads(threads = as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "8")))
 
 # set genome to hg38
 addArchRGenome("hg38")
@@ -85,23 +111,28 @@ proj <- loadArchRProject(path = archrPath)
 filePrefix <- gsub("_", "", groupBy)
 
 # Load and assign appropriate PeakSet based on groupBy
-peakSetPath <- paste0("/cluster/projects/wouterslab/ArchR103_4/", archrPath, "/PeakCalls/PeakSet_gr_", groupBy, ".rds")
-print(paste("Loading PeakSet from:", peakSetPath))
+localPeakSetPath <- file.path(archrPath, "PeakCalls", paste0("PeakSet_gr_", groupBy, ".rds"))
+clusterPeakSetPath <- file.path("/cluster/projects/wouterslab/ArchR103_4", archrPath, "PeakCalls", paste0("PeakSet_gr_", groupBy, ".rds"))
 
-if (file.exists(peakSetPath)) {
-    peakSet_gr <- readRDS(peakSetPath)
-    print(paste("PeakSet loaded successfully for", groupBy))
-
-    # Add the PeakSet to the ArchR project
-    proj <- addPeakSet(
-        ArchRProj = proj,
-        peakSet = peakSet_gr,
-        force = TRUE
-    )
-    print("PeakSet added to ArchR project")
+if (file.exists(localPeakSetPath)) {
+    peakSetPath <- localPeakSetPath
+} else if (file.exists(clusterPeakSetPath)) {
+    peakSetPath <- clusterPeakSetPath
 } else {
-    stop(paste("PeakSet file not found:", peakSetPath))
+    stop(paste("PeakSet file not found in local path:", localPeakSetPath, "or cluster path:", clusterPeakSetPath))
 }
+
+print(paste("Loading PeakSet from:", peakSetPath))
+peakSet_gr <- readRDS(peakSetPath)
+print(paste("PeakSet loaded successfully for", groupBy))
+
+# Add the PeakSet to the ArchR project
+proj <- addPeakSet(
+    ArchRProj = proj,
+    peakSet = peakSet_gr,
+    force = TRUE
+)
+print("PeakSet added to ArchR project")
 
 # ── Load marker features ───────────────────────────────────────────────────────
 # Pairwise mode  → markersTest_{groupBy}PIMOup_vs_PIMOdown.rds
@@ -162,28 +193,6 @@ if (annoName %in% names(proj@peakAnnotation)) {
     print(paste("Motif annotations do not exist. Proceeding to add them with motifSet:", motifSet))
     proj <- addMotifAnnotations(ArchRProj = proj, motifSet = motifSet, annoName = annoName)
 }
-
-# Determine motifs in a given gene locus
-# Example for CEBPA
-
-# get peakset
-# note: addPeakSet() can be used to assign the peakset if multiple peaksets exist
-# only one peakset can be active at a time
-
-print("Getting peakset from ArchR project")
-pSet <- getPeakSet(ArchRProj = proj)
-pSet$name <- paste(seqnames(pSet), start(pSet), end(pSet), sep = "_")
-
-# get motif matches for the peakset
-print(paste("Getting motif matches for the peakset using", annoName))
-matches <- getMatches(ArchRProj = proj, name = annoName)
-rownames(matches) <- paste(seqnames(matches), start(matches), end(matches), sep = "_")
-matches <- matches[pSet$name]
-
-# GR object corresponding to CEBPA promoter
-print("Finding motifs in CEBPA promoter region")
-gr <- GRanges(seqnames = c("chr19"), ranges = IRanges(start = c(33792929), end = c(33794030)))
-queryHits <- queryHits(findOverlaps(query = pSet, subject = gr, type = "within"))
 
 # ── Motif Enrichment in differentially Accessible Peaks ───────────────────────
 

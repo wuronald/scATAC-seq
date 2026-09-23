@@ -9,24 +9,42 @@
 #SBATCH --mem=16G
 #SBATCH --time=01:00:00
 
-# Parse command line arguments
-# First argument: GROUPBY - which groupBy condition to analyze (PIMO_up_status or PIMO_Region)
-# Second argument: ANALYSIS_TYPE - either "markers" for general markers or "pairwise" for pairwise test
-# Third argument: COMPARISON - for pairwise tests, specify the comparison (optional, only used if ANALYSIS_TYPE="pairwise")
-# Fourth argument: GENES - genes for plotting browser tracks
-# 
-# Example usage for general markers:
-# sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_up_status" "markers"
-# sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "markers"
+# ==============================================================================
+# Purpose: SLURM batch submission script to visualize marker peaks, MA/volcano plots,
+#          and genome browser tracks for the Gaiti multiome ArchR project.
+# Workflow:
+#   1. Loads peak-annotated ArchR project ('Gaiti_multiome_harmony_merged_malig_peak/').
+#   2. Resolves and loads the corresponding marker peaks SummarizedExperiment
+#      (general markers or pairwise test contrast).
+#   3. Generates differential marker peak heatmaps (plotMarkerHeatmap, FDR <= 0.1 & abs(Log2FC) >= 0.5).
+#   4. Generates MA and Volcano diagnostic plots for each comparison group.
+#   5. Plots genomic browser tracks (plotBrowserTrack) across 50 marker genes with
+#      flanking 50 kb regions and highlights significant marker peak features.
 #
-# Example usage for pairwise tests:
-# sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "pairwise" "PIMOup_EB_vs_PIMOup_TC"
-# sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "pairwise" "PIMOup_EB_vs_PIMOdown_EB"
-# sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "pairwise" "PIMOup_TC_vs_PIMOdown_TC"
-# sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "pairwise" "PIMOup_PT_vs_PIMOdown_PT"
+# Usage:
+#   sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh \
+#       [GROUPBY] [ANALYSIS_TYPE] [COMPARISON] [GENES]
 #
-# Example with custom genes:
-# sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "pairwise" "PIMOup_EB_vs_PIMOup_TC" "HIF1A,CA9,VEGFA"
+# Arguments (all positional, optional):
+#   $1  GROUPBY        Metadata column to analyze (default: PIMO_up_status)
+#   $2  ANALYSIS_TYPE  Analysis type: 'markers' for general group markers or 'pairwise' (default: markers)
+#   $3  COMPARISON     Pairwise comparison suffix (required if ANALYSIS_TYPE='pairwise', e.g. PIMOup_EB_vs_PIMOup_TC)
+#   $4  GENES          Comma-separated gene symbols for browser tracks (default: 50 hypoxia & lineage marker genes)
+#
+# Examples:
+#   # General group markers:
+#   sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_up_status" "markers"
+#   sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "markers"
+#
+#   # Pairwise test contrasts:
+#   sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "pairwise" "PIMOup_EB_vs_PIMOup_TC"
+#   sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "pairwise" "PIMOup_EB_vs_PIMOdown_EB"
+#   sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "pairwise" "PIMOup_TC_vs_PIMOdown_TC"
+#   sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "pairwise" "PIMOup_PT_vs_PIMOdown_PT"
+#
+#   # Custom gene list:
+#   sbatch scripts/run_06_Gaiti_multiome_markerHeatmap.sh "PIMO_Region" "pairwise" "PIMOup_EB_vs_PIMOup_TC" "HIF1A,CA9,VEGFA"
+# ==============================================================================
 
 GROUPBY="${1:-PIMO_up_status}"
 ANALYSIS_TYPE="${2:-markers}"
@@ -74,7 +92,7 @@ if (comparison != "") {
 print(paste("Number of genes:", length(genes)))
 
 # Set the number of threads for ArchR
-addArchRThreads(threads = 18)
+addArchRThreads(threads = as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "8")))
 
 # set genome to hg38
 addArchRGenome("hg38")
@@ -182,14 +200,8 @@ print("All MA and Volcano plots created and saved.")
 print("Plotting marker peaks in browser tracks for genes of interest")
 print(paste("Genes of interest:", paste(genes, collapse = ", ")))
 
-# For pairwise comparisons, we need to use the appropriate groupBy for browser tracks
-# Extract the groups being compared for proper visualization
-if (analysis_type == "pairwise") {
-    # Use the groupBy variable for browser tracks (e.g., "PIMO_Region")
-    browser_groupBy <- groupBy
-} else {
-    browser_groupBy <- groupBy
-}
+# Use the groupBy variable for browser tracks
+browser_groupBy <- groupBy
 
 p <- plotBrowserTrack(
     ArchRProj = proj_hyp, 

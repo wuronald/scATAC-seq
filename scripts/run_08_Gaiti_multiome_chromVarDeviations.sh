@@ -155,12 +155,15 @@ dir.create(outDir, showWarnings = FALSE, recursive = TRUE)
 # Tier 3: Pre-existing embedded peakSet in ArchR project (proj@peakSet)
 
 candidatePaths <- character(0)
-# Candidate 1: current groupBy
-candidatePaths <- c(candidatePaths, paste0("/cluster/projects/wouterslab/ArchR103_4/", archrProject, "/PeakCalls/PeakSet_gr_", groupBy, ".rds"))
-
-# Candidate 2: initial groupBy (if different from current groupBy)
+# Local candidates
+candidatePaths <- c(candidatePaths, file.path(archrProject, "PeakCalls", paste0("PeakSet_gr_", groupBy, ".rds")))
 if (initialGroupBy != groupBy) {
-    candidatePaths <- c(candidatePaths, paste0("/cluster/projects/wouterslab/ArchR103_4/", archrProject, "/PeakCalls/PeakSet_gr_", initialGroupBy, ".rds"))
+    candidatePaths <- c(candidatePaths, file.path(archrProject, "PeakCalls", paste0("PeakSet_gr_", initialGroupBy, ".rds")))
+}
+# Cluster candidates
+candidatePaths <- c(candidatePaths, file.path("/cluster/projects/wouterslab/ArchR103_4", archrProject, "PeakCalls", paste0("PeakSet_gr_", groupBy, ".rds")))
+if (initialGroupBy != groupBy) {
+    candidatePaths <- c(candidatePaths, file.path("/cluster/projects/wouterslab/ArchR103_4", archrProject, "PeakCalls", paste0("PeakSet_gr_", initialGroupBy, ".rds")))
 }
 candidatePaths <- unique(candidatePaths)
 
@@ -346,7 +349,7 @@ if (length(markerMotifs) == 0) {
     })
     
     plotPDF(
-        p, 
+        p2, 
         name = paste0(filePrefix, "-Groups-Deviations-w-Imputation_", motifSet), 
         width = 5, 
         height = 5, 

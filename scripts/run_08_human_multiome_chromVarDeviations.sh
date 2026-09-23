@@ -9,18 +9,35 @@
 #SBATCH --mem=60G
 #SBATCH --time=02:00:00
 
-# Parse command line arguments
-# First argument:  motif set (homer, encode, JASPAR2020, JASPAR2018, JASPAR2016, cisbp)
-# Second argument: groupBy variable (e.g., "PIMO_up_status", "hybrid_pair")
-# Third argument:  ArchR project name (e.g., "human_multiome_harmony_merged_malig_peak")
-# Fourth argument (optional): comma-separated motifs of interest (e.g., "SOX,HIF,ARNT,NF1,NFI")
-# Fifth argument  (optional): comma-separated groupBy levels to exclude from plotGroups (e.g., "PIMOup,PIMOinter")
-# Example usage:
-# sbatch scripts/run_08_human_multiome_chromVarDeviations.sh homer PIMO_up_status
-# sbatch scripts/run_08_human_multiome_chromVarDeviations.sh cisbp hybrid_pair human_multiome_harmony_merged_malig_peak "SOX,HIF,ARNT,NF1,NFI"
-# sbatch scripts/run_08_human_multiome_chromVarDeviations.sh homer combined_program human_multiome_hmmp_k3_program_all_cells "" "PIMOup"
-# sbatch scripts/run_08_human_multiome_chromVarDeviations.sh cisbp combined_program human_multiome_hmmp_k3_program_all_cells "SOX,HIF" "PIMOup,PIMOinter"
+# ==============================================================================
+# Purpose: SLURM batch script to compute transcription factor (TF) motif
+#          deviations using chromVAR in ArchR for Human multiome datasets.
+# Key Features:
+#   1. Computes chromVAR deviation z-scores for specified motif databases (HOMER, CIS-BP, JASPAR).
+#   2. Group exclusion support (EXCLUDE_GROUPS) for clean group comparison plots.
+#   3. Robust PeakSet resolution (local path -> cluster path -> embedded project peakSet).
+#   4. Generates deviation variability plots, group violin/ridge plots, and UMAP embeddings with imputation.
+#   5. Identifies putative positive TF regulators by correlating motif deviations with TF gene expression.
+#
+# Usage:
+#   sbatch scripts/run_08_human_multiome_chromVarDeviations.sh \
+#       [MOTIF_SET] [GROUP_BY] [ARCHR_PROJECT] [MOTIFS_OF_INTEREST] [EXCLUDE_GROUPS]
+#
+# Arguments (all positional, optional):
+#   $1  MOTIF_SET           Motif database (homer, encode, JASPAR2020, JASPAR2018, JASPAR2016, cisbp)
+#                           (default: homer)
+#   $2  GROUP_BY            Metadata column used for grouping/markers (default: PIMO_up_status)
+#   $3  ARCHR_PROJECT       ArchR project directory (default: human_multiome_harmony_merged_malig_peak)
+#   $4  MOTIFS_OF_INTEREST  Comma-separated list of motif names of interest
+#   $5  EXCLUDE_GROUPS      Comma-separated list of group levels to exclude from violin/ridge plots
+#
+# Examples:
+#   sbatch scripts/run_08_human_multiome_chromVarDeviations.sh homer PIMO_up_status
+#   sbatch scripts/run_08_human_multiome_chromVarDeviations.sh cisbp hybrid_pair human_multiome_harmony_merged_malig_peak "SOX,HIF,ARNT,NF1,NFI"
+#   sbatch scripts/run_08_human_multiome_chromVarDeviations.sh homer combined_program human_multiome_hmmp_k3_program_all_cells "" "PIMOup"
+# ==============================================================================
 
+# Parse command line arguments
 MOTIF_SET="${1:-homer}"  # Default to "homer" if no argument provided
 GROUP_BY="${2:-PIMO_up_status}"  # Default to "PIMO_up_status" if no argument provided
 ARCHR_PROJECT="${3:-human_multiome_harmony_merged_malig_peak}"  # Default project name if not provided
@@ -55,11 +72,11 @@ library(ggplot2)
 set.seed(1)
 
 # Get parameters from environment variables
-motifSet      <- Sys.getenv("MOTIF_SET",      unset = "homer")
-groupBy       <- Sys.getenv("GROUP_BY",       unset = "PIMO_up_status")
-archrProject  <- Sys.getenv("ARCHR_PROJECT",  unset = "human_multiome_harmony_merged_malig_peak")
-motifsOfInterest <- Sys.getenv("MOTIFS_OF_INTEREST", unset = "SOX,HIF,ARNT,NF1,NFI")
-excludeGroupsEnv <- Sys.getenv("EXCLUDE_GROUPS", unset = "")
+motifSet          <- Sys.getenv("MOTIF_SET",          unset = "homer")
+groupBy           <- Sys.getenv("GROUP_BY",           unset = "PIMO_up_status")
+archrProject      <- Sys.getenv("ARCHR_PROJECT",      unset = "human_multiome_harmony_merged_malig_peak")
+motifsOfInterest  <- Sys.getenv("MOTIFS_OF_INTEREST", unset = "SOX,HIF,ARNT,NF1,NFI")
+excludeGroupsEnv  <- Sys.getenv("EXCLUDE_GROUPS",     unset = "")
 
 # Convert comma-separated string to vector
 moi <- trimws(unlist(strsplit(motifsOfInterest, ",")))
@@ -90,23 +107,43 @@ annoName <- paste0("Motif_", motifSet)
 outDir <- here(paste0(archrProject, "/chromVarDeviations_", motifSet, "_", groupBy, "/"))
 dir.create(outDir, showWarnings = FALSE, recursive = TRUE)
 
-# Load and assign appropriate PeakSet based on groupBy
-peakSetPath <- paste0("/cluster/projects/wouterslab/ArchR103_4/", archrProject, "/PeakCalls/PeakSet_gr_", groupBy, ".rds")
-print(paste("Loading PeakSet from:", peakSetPath))
+# ─── Load PeakSet with hierarchical resolution ────────────────────────────────
+# Priority:
+# 1. Local PeakSet .rds (file.path(archrProject, "PeakCalls", ...))
+# 2. Cluster PeakSet .rds (/cluster/projects/wouterslab/ArchR103_4/...)
+# 3. Pre-existing embedded peakSet in ArchR project (proj@peakSet)
 
-if (file.exists(peakSetPath)) {
-    peakSet_gr <- readRDS(peakSetPath)
-    print(paste("PeakSet loaded successfully for", groupBy))
-    
-    # Add the PeakSet to the ArchR project
-    proj <- addPeakSet(
-        ArchRProj = proj,
-        peakSet = peakSet_gr,
-        force = TRUE
-    )
-    print("PeakSet added to ArchR project")
-} else {
-    stop(paste("PeakSet file not found:", peakSetPath))
+candidatePaths <- c(
+    file.path(archrProject, "PeakCalls", paste0("PeakSet_gr_", groupBy, ".rds")),
+    file.path("/cluster/projects/wouterslab/ArchR103_4", archrProject, "PeakCalls", paste0("PeakSet_gr_", groupBy, ".rds"))
+)
+candidatePaths <- unique(candidatePaths)
+
+loadedPeakSet <- FALSE
+for (peakSetPath in candidatePaths) {
+    print(paste("Checking for PeakSet at:", peakSetPath))
+    if (file.exists(peakSetPath)) {
+        peakSet_gr <- readRDS(peakSetPath)
+        print(paste("✓ PeakSet loaded successfully from:", peakSetPath))
+        
+        # Add the PeakSet to the ArchR project
+        proj <- addPeakSet(
+            ArchRProj = proj,
+            peakSet = peakSet_gr,
+            force = TRUE
+        )
+        print("✓ PeakSet added to ArchR project")
+        loadedPeakSet <- TRUE
+        break
+    }
+}
+
+if (!loadedPeakSet) {
+    if (!is.null(proj@peakSet) && length(proj@peakSet) > 0) {
+        print(paste("Warning: No candidate PeakSet .rds files found on disk - proceeding with existing peakSet embedded in ArchR project (", length(proj@peakSet), "peaks)"))
+    } else {
+        stop(paste0("Error: No candidate PeakSet files found in:\n  ", paste(candidatePaths, collapse = "\n  "), "\nand no peakSet exists in ArchR project."))
+    }
 }
 
 # Check if motif annotations exist, if not add them
@@ -265,7 +302,7 @@ if (length(markerMotifs) == 0) {
     })
     
     plotPDF(
-        p, 
+        p2, 
         name = paste0(filePrefix, "-Groups-Deviations-w-Imputation_", motifSet), 
         width = 5, 
         height = 5, 

@@ -9,9 +9,23 @@
 #SBATCH --mem=60G
 #SBATCH --time=03:00:00
 
-# ─── Usage ────────────────────────────────────────────────────────────────────
-# Parameters are passed via sbatch --export. All are optional; defaults are used
-# for any variable not supplied.
+# ==============================================================================
+# Purpose: SLURM batch submission script to perform pseudo-bulk group coverage,
+#          reproducible MACS2 peak calling, PeakMatrix creation, marker peak
+#          identification, and pairwise differential testing for the Human Multiome
+#          ArchR project.
+# Workflow:
+#   1. Loads ArchR project (default: 'human_multiome_harmony_merged/').
+#   2. Optionally subsets to malignant, non-ambiguous cells ('Azimuth_class == "Malignant" & Ambiguous == FALSE').
+#   3. Generates pseudo-bulk group coverages ('addGroupCoverages') across specified 'groupBy' metadata columns.
+#   4. Calls reproducible peak sets with MACS2 ('addReproduciblePeakSet') and saves GRanges peak sets.
+#   5. Adds 'PeakMatrix' and identifies marker peaks ('getMarkerFeatures') with bias matching.
+#   6. Runs pairwise differential peak testing between PIMOup and PIMOdown (if 'PIMO_up_status' is in 'GROUP_BY_COLS').
+#   7. Saves the peak-annotated ArchR project.
+#
+# Usage:
+#   Parameters are passed via sbatch --export. All are optional; defaults are used
+#   for any variable not supplied.
 #
 # Variables:
 #   ARCHR_PROJECT   Path to load the ArchR project
@@ -24,12 +38,12 @@
 #                   (default: hybrid_pair,PIMO_up_status)
 #
 # Examples:
-#   sbatch run_05_human_multiome_peakCalling.sh
+#   sbatch scripts/run_05_human_multiome_peakCalling.sh
 #   sbatch --export=ALL,SKIP_SUBSET=true,ARCHR_PROJECT=human_multiome_hmmp_k3_program scripts/run_05_human_multiome_peakCalling.sh
 #   sbatch --export=ALL,ARCHR_PROJECT=human_multiome_hmmp_k3_program,SKIP_SUBSET=true,SUBSET_OUTDIR=human_multiome_hmmp_k3_program_peak,GROUP_BY_COLS=k3_program scripts/run_05_human_multiome_peakCalling.sh
 #   sbatch --export=ALL,ARCHR_PROJECT=human_multiome_hmmp_k3_program_all_cells,SKIP_SUBSET=true,SUBSET_OUTDIR=human_multiome_hmmp_k3_program_all_cells,GROUP_BY_COLS=combined_program scripts/run_05_human_multiome_peakCalling.sh
 #   sbatch --export=ALL,ARCHR_PROJECT=human_multiome_hmmp_nomura,SKIP_SUBSET=true,SUBSET_OUTDIR=human_multiome_hmmp_nomura_peak,GROUP_BY_COLS=meta_module scripts/run_05_human_multiome_peakCalling.sh
-# ──────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
 
 # ─── Parameters (set via --export at sbatch submission) ───────────────────────
 # Defaults are used for any variable not supplied via --export.
@@ -65,14 +79,14 @@ library(here)
 set.seed(1)
 
 # ─── Parameters passed in from shell ─────────────────────────────────────────
-archr_project_path <- Sys.getenv("ARCHR_PROJECT")
-skip_subset        <- as.logical(Sys.getenv("SKIP_SUBSET"))
-subset_outdir      <- Sys.getenv("SUBSET_OUTDIR")
-groupBy_list       <- strsplit(Sys.getenv("GROUP_BY_COLS"), ",")[[1]]
+archr_project_path <- Sys.getenv("ARCHR_PROJECT", unset = "human_multiome_harmony_merged")
+skip_subset        <- as.logical(Sys.getenv("SKIP_SUBSET", unset = "false"))
+subset_outdir      <- Sys.getenv("SUBSET_OUTDIR", unset = "human_multiome_harmony_merged_malig_peak")
+groupBy_list       <- strsplit(Sys.getenv("GROUP_BY_COLS", unset = "hybrid_pair,PIMO_up_status"), ",")[[1]]
 groupBy_list       <- trimws(groupBy_list)  # remove any accidental whitespace
 
 # Set the number of threads for ArchR
-addArchRThreads(threads = 18)
+addArchRThreads(threads = as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "8")))
 
 # set genome to hg38
 addArchRGenome("hg38")
@@ -115,17 +129,28 @@ if (length(missing_cols) > 0) {
 }
 
 # ─── Find MACS2 path ─────────────────────────────────────────────────────────
+# Note: Adjust default HPC path fallback below to match your cluster/system settings if needed.
 if (exists("findMacs2")) {
   pathToMacs2 <- findMacs2()
-  if (!is.null(pathToMacs2)) {
+  if (is.null(pathToMacs2) || !nzchar(pathToMacs2)) {
+    # Fallback if findMacs2() cannot find it in PATH or standard locations
+    cluster_macs2 <- "/cluster/tools/software/rocky9/MACS/2.2.7.1/bin/macs2"
+    if (file.exists(cluster_macs2)) {
+      pathToMacs2 <- cluster_macs2
+    }
+  }
+  if (!is.null(pathToMacs2) && nzchar(pathToMacs2)) {
     print(paste("MACS2 found at:", pathToMacs2))
-    pathToMacs2 <- "/cluster/tools/software/rocky9/MACS/2.2.7.1/bin/macs2"
   } else {
-    stop("MACS2 not found or path is invalid. Please check your MACS2 installation.")
+    stop("MACS2 not found or path is invalid. Please check your MACS2 installation or adjust pathToMacs2.")
   }
 } else {
   stop("findMacs2() function not found. Please ensure ArchR is installed correctly.")
 }
+
+# Ensure output PeakCalls directory exists
+peak_calls_dir <- file.path(subset_outdir, "PeakCalls")
+dir.create(peak_calls_dir, showWarnings = FALSE, recursive = TRUE)
 
 # ─── Peak calling loop ────────────────────────────────────────────────────────
 for (groupBy in groupBy_list) {
@@ -154,8 +179,8 @@ for (groupBy in groupBy_list) {
   print(table(myPeakSet$peakType))
 
   # Save the peakSet gr object
-  peakset_path <- file.path(subset_outdir, "PeakCalls", paste0("PeakSet_gr_", groupBy, ".rds"))
-  print(paste("Saved peakSet as .RData for", groupBy))
+  peakset_path <- file.path(peak_calls_dir, paste0("PeakSet_gr_", groupBy, ".rds"))
+  print(paste("Saved peakSet as .rds for", groupBy))
   saveRDS(myPeakSet, file = peakset_path)
 
   # Check available matrices
@@ -194,12 +219,12 @@ for (groupBy in groupBy_list) {
   )
 
   # Save the markersPeaks SE object
-  markers_path <- file.path(subset_outdir, "PeakCalls", paste0("markersPeaks_", groupBy, ".rds"))
+  markers_path <- file.path(peak_calls_dir, paste0("markersPeaks_", groupBy, ".rds"))
   print(paste("Saved markersPeaks as .rds for", groupBy))
   saveRDS(markersPeaks, file = markers_path)
 
   # Save the markersPeaks GR object
-  markers_gr_path <- file.path(subset_outdir, "PeakCalls", paste0("markersPeaks_GR_", groupBy, ".rds"))
+  markers_gr_path <- file.path(peak_calls_dir, paste0("markersPeaks_GR_", groupBy, ".rds"))
   print(paste("Saved markersPeaks GR as .rds for", groupBy))
   markersPeaks_GR <- getMarkers(markersPeaks, cutOff = "FDR <=  1 & abs(Log2FC) >= 0", returnGR = TRUE)
   saveRDS(markersPeaks_GR, file = markers_gr_path)
@@ -219,7 +244,7 @@ if ("PIMO_up_status" %in% groupBy_list) {
   )
 
   # Save markerTest SE object
-  markertest_path <- file.path(subset_outdir, "PeakCalls", "markersTest_PIMO_up_status_PIMOup_vs_PIMOdown.rds")
+  markertest_path <- file.path(peak_calls_dir, "markersTest_PIMO_up_status_PIMOup_vs_PIMOdown.rds")
   print("Saved markerTest as .rds for PIMO_up_status PIMOup vs PIMOdown")
   saveRDS(markerTest, file = markertest_path)
 
@@ -230,7 +255,7 @@ if ("PIMO_up_status" %in% groupBy_list) {
   print("Number of markerTest peaks identified per group:")
   print(sapply(markerTest_GR, length))
 
-  markertest_gr_path <- file.path(subset_outdir, "PeakCalls", "markersTest_GR_PIMO_up_status_PIMOup_vs_PIMOdown.rds")
+  markertest_gr_path <- file.path(peak_calls_dir, "markersTest_GR_PIMO_up_status_PIMOup_vs_PIMOdown.rds")
   saveRDS(markerTest_GR, file = markertest_gr_path)
 } else {
   print("PIMO_up_status not in groupBy list -- skipping pairwise PIMOup vs PIMOdown test.")

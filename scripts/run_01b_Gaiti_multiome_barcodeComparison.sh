@@ -9,6 +9,20 @@
 #SBATCH --mem=12G
 #SBATCH --time=01:00:00
 
+# ==============================================================================
+# Purpose: SLURM batch diagnostic script to perform all-vs-all pairwise cell barcode
+#          comparisons across ArchR Arrow files, 10x RNA H5 matrices, and raw GEO TSVs
+#          for Gaiti samples 6467_A and 6467_B.
+# Context: Used for forensic QC to verify cell identity and resolve sample swaps
+#          prior to ArchR multiome integration.
+# Output:  'Gaiti_multiome_all_vs_all_comparison/' containing:
+#            - summary_stats.csv (overlap & unique counts matrix)
+#            - COMPARE_<A>_vs_<B>_*.txt (barcode lists)
+#
+# Example usage:
+#   sbatch scripts/run_01b_Gaiti_multiome_barcodeComparison.sh
+# ==============================================================================
+
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
 
@@ -17,18 +31,54 @@ Rscript - <<'EOF'
 # load libraries
 library(rhdf5)
 library(utils)
+library(here)
+
+# Helper function to find first existing path from candidates
+find_file <- function(candidates) {
+  for (f in candidates) {
+    if (file.exists(f)) return(f)
+  }
+  return(candidates[1])
+}
 
 # --- CONFIGURATION ---
+s1_dir <- here::here("data", "Gaiti_multiome", "GSM8820713_6467_A")
+s2_dir <- here::here("data", "Gaiti_multiome", "GSM8820714_6467_B")
+
 files <- list(
-  # Sample 1
-  S1_Arrow = "/cluster/projects/wouterslab/ArchR103_4/GSM8820713_6467_A.arrow",
-  S1_H5    = "/cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820713_6467_A/6467_A_filtered_feature_bc_matrix.h5",
-  S1_TSV   = "/cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820713_6467_A/GSM8820713_6467_A_barcodes.tsv.gz",
+  # Sample 1 (6467_A)
+  S1_Arrow = find_file(c(
+    here::here("GSM8820713_6467_A.arrow"),
+    here::here("Gaiti_multiome", "GSM8820713_6467_A.arrow"),
+    "/cluster/projects/wouterslab/ArchR103_4/GSM8820713_6467_A.arrow"
+  )),
+  S1_H5 = find_file(c(
+    file.path(s1_dir, "filtered_feature_bc_matrix.h5"),
+    file.path(s1_dir, "6467_A_filtered_feature_bc_matrix.h5"),
+    "/cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820713_6467_A/6467_A_filtered_feature_bc_matrix.h5"
+  )),
+  S1_TSV = find_file(c(
+    file.path(s1_dir, "GSM8820713_6467_A_barcodes.tsv.gz"),
+    file.path(s1_dir, "barcodes.tsv.gz"),
+    "/cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820713_6467_A/GSM8820713_6467_A_barcodes.tsv.gz"
+  )),
   
-  # Sample 2
-  S2_Arrow = "/cluster/projects/wouterslab/ArchR103_4/GSM8820714_6467_B.arrow",
-  S2_H5    = "/cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820714_6467_B/6467_B_filtered_feature_bc_matrix.h5",
-  S2_TSV   = "/cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820714_6467_B/GSM8820714_6467_B_barcodes.tsv.gz"
+  # Sample 2 (6467_B)
+  S2_Arrow = find_file(c(
+    here::here("GSM8820714_6467_B.arrow"),
+    here::here("Gaiti_multiome", "GSM8820714_6467_B.arrow"),
+    "/cluster/projects/wouterslab/ArchR103_4/GSM8820714_6467_B.arrow"
+  )),
+  S2_H5 = find_file(c(
+    file.path(s2_dir, "filtered_feature_bc_matrix.h5"),
+    file.path(s2_dir, "6467_B_filtered_feature_bc_matrix.h5"),
+    "/cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820714_6467_B/6467_B_filtered_feature_bc_matrix.h5"
+  )),
+  S2_TSV = find_file(c(
+    file.path(s2_dir, "GSM8820714_6467_B_barcodes.tsv.gz"),
+    file.path(s2_dir, "barcodes.tsv.gz"),
+    "/cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820714_6467_B/GSM8820714_6467_B_barcodes.tsv.gz"
+  ))
 )
 
 output_dir <- "Gaiti_multiome_all_vs_all_comparison"

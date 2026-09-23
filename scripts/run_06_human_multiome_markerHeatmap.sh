@@ -9,43 +9,41 @@
 #SBATCH --mem=16G
 #SBATCH --time=00:30:00
 
-# =============================================================================
-# Parse command line arguments
+# ==============================================================================
+# Purpose: SLURM batch submission script to visualize marker peaks, MA/volcano plots,
+#          and genome browser tracks for the Human Multiome ArchR project.
+# Workflow:
+#   1. Loads peak-annotated ArchR project (default: 'human_multiome_harmony_merged_malig_peak/').
+#   2. Loads pre-computed marker peaks SummarizedExperiment (or computes on-the-fly if missing).
+#   3. Generates differential marker peak heatmaps (plotMarkerHeatmap, FDR <= 0.1 & abs(Log2FC) >= 0.5).
+#   4. Generates MA and Volcano diagnostic plots for each comparison group.
+#   5. Plots genomic browser tracks (plotBrowserTrack) across 50 marker genes with
+#      flanking 50 kb regions and highlights significant marker peak features.
+#
 # Usage:
 #   sbatch scripts/run_06_human_multiome_markerHeatmap.sh \
 #       [ARCHR_PATH] [GROUP_BY] [GENES] [PAIRWISE]
 #
-# Arguments (all optional, positional):
+# Arguments (all positional, optional):
 #   $1  ARCHR_PATH  Path to the ArchRProject directory
-#                   Default: human_multiome_harmony_merged_malig_peak
-#
+#                   (default: human_multiome_harmony_merged_malig_peak)
 #   $2  GROUP_BY    Metadata column to group cells by for marker analysis
-#                   Default: PIMO_up_status
-#
+#                   (default: PIMO_up_status)
 #   $3  GENES       Comma-separated gene symbols for browser tracks
-#                   Default: CTSB,OLIG1,OLIG2,... (see below)
-#
+#                   (default: 50 hypoxia & cell-state marker genes)
 #   $4  PAIRWISE    Whether to load a pairwise markersTest RDS (true/false)
-#                   Default: true when GROUP_BY=PIMO_up_status, false otherwise
-#                   true  → loads markersTest_{GROUP_BY}_PIMOup_vs_PIMOdown.rds
-#                   false → loads markersPeaks_{GROUP_BY}.rds
+#                   (default: true when GROUP_BY=PIMO_up_status, false otherwise)
 #
 # Examples:
 #   # Run with all defaults (PIMO_up_status, pairwise=true):
 #   sbatch scripts/run_06_human_multiome_markerHeatmap.sh
 #
 #   # Custom project + groupBy, pairwise auto-defaults to false:
-#   sbatch scripts/run_06_human_multiome_markerHeatmap.sh \
-#       "human_multiome_hmmp_k3_program" "k3_program"
+#   sbatch scripts/run_06_human_multiome_markerHeatmap.sh "human_multiome_hmmp_k3_program" "k3_program"
 #
-#   # Force pairwise off for PIMO_up_status:
-#   sbatch scripts/run_06_human_multiome_markerHeatmap.sh \
-#       "human_multiome_harmony_merged_malig_peak" "PIMO_up_status" "" "false"
-#
-#   # All arguments specified:
-#   sbatch scripts/run_06_human_multiome_markerHeatmap.sh \
-#       "human_multiome_hmmp_k3_program" "k3_program" "VOPP1,LANCL2,EGFR,NEAT1,ZBTB20,MT2A,ERRFI1,DST,GAPDH,CD63,ACTB,FTL" "false"
-# =============================================================================
+#   # Custom project with specific gene list:
+#   sbatch scripts/run_06_human_multiome_markerHeatmap.sh "human_multiome_hmmp_k3_program" "k3_program" "VOPP1,EGFR,CA9,VEGFA,SLC2A1" "false"
+# ==============================================================================
 
 DEFAULT_GENES="CTSB,OLIG1,OLIG2,SOX2,CD109,CD44,RND3,STMN2,NGFR,SOX10,ID1,ID2,ID3,CA9,VEGFA,SLC2A1,\
 EMX2,HES1,NR4A2,NR4A3,KLF9,NRN1,DNER,DPYSL4,RND3,CADM3,PLPPR3,SLC2A3,SLC5A3,PCP4,SOX12,\
@@ -136,7 +134,7 @@ cat("  group_by        :", group_by, "\n")
 cat("  genes           :", paste(genes, collapse = ", "), "\n\n")
 
 # ── ArchR setup ───────────────────────────────────────────────────────────────
-addArchRThreads(threads = 18)
+addArchRThreads(threads = as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "8")))
 addArchRGenome("hg38")
 
 # ── Load ArchRProject ─────────────────────────────────────────────────────────

@@ -9,21 +9,45 @@
 #SBATCH --mem=58G
 #SBATCH --time=00:30:00
 
-# Parse command line arguments
-# First argument: motif set (homer, encode, JASPAR2020, JASPAR2018, JASPAR2016, cisbp)
-# Second argument: groupBy variable (e.g., "PIMO_up_status", "PIMO_Region", "Region.annotation")
-# Third argument: comparison name (e.g., "PIMOup_vs_PIMOdown", "PIMOup_EB_vs_PIMOup_TC", "EB_vs_TC")
-#                 If not provided, defaults based on GROUP_BY:
-#                   - PIMO_up_status -> PIMOup_vs_PIMOdown
-#                   - PIMO_Region -> PIMOup_EB_vs_PIMOup_TC
-#                   - Region.annotation -> EB_vs_TC
-# Example usage:
-# sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer PIMO_up_status PIMOup_vs_PIMOdown
-# sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer PIMO_Region PIMOup_EB_vs_PIMOup_TC
-# sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh cisbp PIMO_Region PIMOup_EB_vs_PIMOdown_EB
-# sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer Region.annotation EB_vs_TC
-# sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer Region.annotation EB_vs_PT
-# sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer Region.annotation TC_vs_PT
+## ==============================================================================
+# Purpose: SLURM batch submission script to perform transcription factor (TF)
+#          motif enrichment analysis on pairwise differential accessible peaks
+#          for the Gaiti multiome ArchR project.
+# Workflow:
+#   1. Loads peak-annotated ArchR project ('Gaiti_multiome_harmony_merged_malig_peak/').
+#   2. Loads and attaches the corresponding PeakSet ('PeakSet_gr_<groupBy>.rds').
+#   3. Loads pre-computed pairwise marker features ('markersTest_<groupBy>_<comparison>.rds').
+#   4. Adds motif annotations for the specified motif set (e.g. homer, cisbp, encode, JASPAR).
+#   5. Computes hypergeometric motif enrichment (peakAnnoEnrichment) for upregulated
+#      (FDR <= 0.1 & Log2FC >= 0.5) and downregulated (FDR <= 0.1 & Log2FC <= -0.5) peaks.
+#   6. Exports motif enrichment SummarizedExperiment objects (.rds).
+#   7. Generates rank-ordered TF enrichment ggplot PDFs with ggrepel labels and
+#      heatmaps (plotEnrichHeatmap).
+#
+# Usage:
+#   sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh \
+#       [MOTIF_SET] [GROUP_BY] [COMPARISON]
+#
+# Arguments (all positional, optional):
+#   $1  MOTIF_SET   Motif database (homer, cisbp, encode, JASPAR2020, JASPAR2018, JASPAR2016)
+#                   (default: homer)
+#   $2  GROUP_BY    Metadata column used for peak calling (default: PIMO_Region)
+#   $3  COMPARISON  Pairwise comparison name (default: auto-detected based on GROUP_BY)
+#
+# Examples:
+#   # PIMO_Region pairwise tests:
+#   sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer PIMO_Region PIMOup_EB_vs_PIMOup_TC
+#   sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer PIMO_Region PIMOup_EB_vs_PIMOdown_EB
+#   sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh cisbp PIMO_Region PIMOup_EB_vs_PIMOdown_EB
+#
+#   # Region.annotation pairwise tests:
+#   sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer Region.annotation EB_vs_TC
+#   sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer Region.annotation EB_vs_PT
+#   sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer Region.annotation TC_vs_PT
+#
+#   # PIMO_up_status pairwise test:
+#   sbatch scripts/run_07_Gaiti_multiome_motifEnrichment.sh homer PIMO_up_status PIMOup_vs_PIMOdown
+# ==============================================================================
 
 MOTIF_SET="${1:-homer}"  # Default to "homer" if no argument provided
 GROUP_BY="${2:-PIMO_Region}"  # Default to "PIMO_Region" if no argument provided
@@ -72,36 +96,42 @@ cat("Using groupBy:", groupBy, "\n")
 cat("Using comparison:", comparison, "\n")
 
 # Set the number of threads for ArchR
-addArchRThreads(threads = 8)
+addArchRThreads(threads = as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "8")))
 
 # set genome to hg38
 addArchRGenome("hg38")
 
 # Load the project
-proj <- loadArchRProject(path = "Gaiti_multiome_harmony_merged_malig_peak")
+archrPath <- "Gaiti_multiome_harmony_merged_malig_peak"
+proj <- loadArchRProject(path = archrPath)
 
 # Create file naming prefix based on groupBy variable and comparison
 # Replace underscores and special chars to create clean file names
 filePrefix <- paste0(gsub("_|\\.", "", groupBy), "_", gsub("_", "", comparison))
 
 # Load and assign appropriate PeakSet based on groupBy
-peakSetPath <- paste0("/cluster/projects/wouterslab/ArchR103_4/Gaiti_multiome_harmony_merged_malig_peak/PeakCalls/PeakSet_gr_", groupBy, ".rds")
-print(paste("Loading PeakSet from:", peakSetPath))
+localPeakSetPath <- file.path(archrPath, "PeakCalls", paste0("PeakSet_gr_", groupBy, ".rds"))
+clusterPeakSetPath <- file.path("/cluster/projects/wouterslab/ArchR103_4", archrPath, "PeakCalls", paste0("PeakSet_gr_", groupBy, ".rds"))
 
-if (file.exists(peakSetPath)) {
-    peakSet_gr <- readRDS(peakSetPath)
-    print(paste("PeakSet loaded successfully for", groupBy))
-    
-    # Add the PeakSet to the ArchR project
-    proj <- addPeakSet(
-        ArchRProj = proj,
-        peakSet = peakSet_gr,
-        force = TRUE
-    )
-    print("PeakSet added to ArchR project")
+if (file.exists(localPeakSetPath)) {
+    peakSetPath <- localPeakSetPath
+} else if (file.exists(clusterPeakSetPath)) {
+    peakSetPath <- clusterPeakSetPath
 } else {
-    stop(paste("PeakSet file not found:", peakSetPath))
+    stop(paste("PeakSet file not found in local path:", localPeakSetPath, "or cluster path:", clusterPeakSetPath))
 }
+
+print(paste("Loading PeakSet from:", peakSetPath))
+peakSet_gr <- readRDS(peakSetPath)
+print(paste("PeakSet loaded successfully for", groupBy))
+
+# Add the PeakSet to the ArchR project
+proj <- addPeakSet(
+    ArchRProj = proj,
+    peakSet = peakSet_gr,
+    force = TRUE
+)
+print("PeakSet added to ArchR project")
 
 # Load markerTest from pairwise differential peaks getMarkerFeatures()
 # Construct path dynamically based on groupBy and comparison
@@ -151,29 +181,7 @@ if (annoName %in% names(proj@peakAnnotation)) {
     proj <- addMotifAnnotations(ArchRProj = proj, motifSet = motifSet, annoName = annoName)
 }   
 
-# Determine motifs in a given gene locus
-# Example for CEBPA
-
-# get peakset
-# note: addPeakSet() can be used to assign the peakset if multiple peaksets exist
-# only one peakset can be active at a time
-
-print("Getting peakset from ArchR project")
-pSet <- getPeakSet(ArchRProj = proj)
-pSet$name <- paste(seqnames(pSet), start(pSet), end(pSet), sep = "_")
-
-# get motif matches for the peakset
-print(paste("Getting motif matches for the peakset using", annoName))
-matches <- getMatches(ArchRProj = proj, name = annoName)
-rownames(matches) <- paste(seqnames(matches), start(matches), end(matches), sep = "_")
-matches <- matches[pSet$name]
-
-# GR object corresponding to CEBPA promoter
-print("Finding motifs in CEBPA promoter region")
-gr <- GRanges(seqnames = c("chr19"), ranges = IRanges(start = c(33792929), end = c(33794030)))
-queryHits <- queryHits(findOverlaps(query = pSet, subject = gr, type = "within"))
-
-# Motif Enrichment in differentially Accessible Peaks
+# ── Motif Enrichment in differentially Accessible Peaks ───────────────────────
 
 print("Performing motif enrichment for upregulated peaks")
 motifsUp <- peakAnnoEnrichment(
@@ -181,7 +189,7 @@ motifsUp <- peakAnnoEnrichment(
     ArchRProj = proj,
     peakAnnotation = annoName,
     cutOff = "FDR <= 0.1 & Log2FC >= 0.5"
-  )
+)
 
 print("Performing motif enrichment for downregulated peaks")
 motifsDown <- peakAnnoEnrichment(
@@ -189,7 +197,7 @@ motifsDown <- peakAnnoEnrichment(
     ArchRProj = proj,
     peakAnnotation = annoName,
     cutOff = "FDR <= 0.1 & Log2FC <= -0.5"
-  )
+)
 
 # Export SummarizedExperiment Motif enrichment results
 print("Exporting motif enrichment results")
@@ -219,7 +227,7 @@ plotMotifEnrichments <- function(motifs) {
             color = "black"
       ) + theme_ArchR() + 
       ylab("-log10(P-adj) Motif Enrichment") + 
-      xlab("Rank Sorted TFs Enriched") +
+      xlab("Rank Sorted TFs Enriched") + 
       scale_colour_gradientn(colors = paletteContinuous(set = "comet"))
     return(gg)
 }
@@ -229,10 +237,35 @@ ggDown <- plotMotifEnrichments(motifsDown)
 
 plotPDF(ggUp, ggDown, name = paste0(filePrefix, "-Markers-Motifs-Enriched_", motifSet), width = 5, height = 5, ArchRProj = proj, addDOC = TRUE)
 
+# Motif Enrichment heatmaps with tryCatch
 print("Plotting heatmap of motif enrichment results")
-heatmapEM_up <- plotEnrichHeatmap(motifsUp, n = 10, transpose = TRUE)
-heatmapEM_down <- plotEnrichHeatmap(motifsDown, n = 10, transpose = TRUE)
-plotPDF(heatmapEM_up, heatmapEM_down, name = paste0(groupBy, "_", comparison, "-MotifsUp_MotifsDown-Enriched-Marker-Heatmap_", motifSet), width = 8, height = 6, ArchRProj = proj, addDOC = TRUE)
+heatmapEM_up <- tryCatch(
+    plotEnrichHeatmap(motifsUp, n = 10, transpose = TRUE),
+    error = function(e) {
+        message("WARNING: plotEnrichHeatmap for motifsUp failed — skipping. Reason: ", conditionMessage(e))
+        NULL
+    }
+)
+heatmapEM_down <- tryCatch(
+    plotEnrichHeatmap(motifsDown, n = 10, transpose = TRUE),
+    error = function(e) {
+        message("WARNING: plotEnrichHeatmap for motifsDown failed — skipping. Reason: ", conditionMessage(e))
+        NULL
+    }
+)
+
+heatmapList <- Filter(Negate(is.null), list(heatmapEM_up, heatmapEM_down))
+if (length(heatmapList) > 0) {
+    do.call(plotPDF, c(heatmapList, list(
+        name = paste0(groupBy, "_", comparison, "-MotifsUp_MotifsDown-Enriched-Marker-Heatmap_", motifSet),
+        width = 8,
+        height = 6,
+        ArchRProj = proj,
+        addDOC = TRUE
+    )))
+} else {
+    message("WARNING: Both heatmaps failed — no heatmap PDF will be written.")
+}
 
 print("Motif enrichment analysis completed successfully!")
 

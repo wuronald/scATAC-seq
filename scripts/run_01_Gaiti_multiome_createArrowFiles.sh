@@ -9,6 +9,27 @@
 #SBATCH --mem=58G
 #SBATCH --time=08:00:00
 
+# ==============================================================================
+# Purpose: SLURM batch submission script to create ArchR Arrow files and initialize
+#          the integrated ArchR project for the Gaiti et al. 10x Multiome dataset (26 samples).
+# Workflow:
+#   1. Scans 'data/Gaiti_multiome/' for ATAC fragments and RNA H5 matrix pairs.
+#   2. Generates Arrow files using the hg38 genome (minTSS = 4, minFrags = 1000).
+#   3. Initializes ArchRProject and imports scRNA-seq GeneExpressionMatrix.
+#   4. Subsets project to matching cells and adds GeneExpressionMatrix.
+#   5. Computes doublet scores, exports predicted doublets to Gaiti_multiome_doublets.txt,
+#      and filters doublets.
+#   6. Saves processed ArchR project into 'Gaiti_multiome/'.
+# Input:   'data/Gaiti_multiome/<Sample>/' containing:
+#            - *fragments.tsv.gz & *fragments.tsv.gz.tbi
+#            - filtered_feature_bc_matrix.h5 (from convert_10x_geo_files_to_h5.sh)
+# Output:  Arrow files + 'Gaiti_multiome/' ArchR project directory + Gaiti_multiome_doublets.txt
+#
+# Example usage:
+#   sbatch scripts/run_01_Gaiti_multiome_createArrowFiles.sh
+# ==============================================================================
+
+# Note on Sample Swap:
 # Remember to rename and move swapped 6467_A_filtered_feature_bc_matrix.h5
 # and 6467_B_filtered_feature_bc_matrix.h5 to their correct sample folders before running this script!
 # mv /cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820713_6467_A/6467_A_filtered_feature_bc_matrix.h5 /cluster/projects/wouterslab/ArchR103_4/data/Gaiti_multiome/GSM8820714_6467_B/temp.h5 && \
@@ -70,35 +91,17 @@ if (length(rnaFiles) == 0) {
   stop("No RNA matrix files found in the specified directory.")
 }
 
-# print("Finding matrix, barcode, and features files for RNA data")
-# # Find matrix files
-# matrix_file <- list.files(
-#   path = parent_dir,
-#   pattern = "matrix.mtx.gz$",
-#   recursive = TRUE,
-#   full.names = TRUE
-# )
-# # Find barcode files
-# barcode_file <- list.files(
-#   path = parent_dir,
-#   pattern = "barcodes.tsv.gz$",
-#   recursive = TRUE,
-#   full.names = TRUE
-# )
-# # Find features files
-# features_file <- list.files(
-#   path = parent_dir,
-#   pattern = "features.tsv.gz$",
-#   recursive = TRUE,
-#   full.names = TRUE
-# )
+# Extract sample names from file paths independently
+names(atacFiles) <- basename(dirname(atacFiles))
+names(rnaFiles)  <- basename(dirname(rnaFiles))
 
-# Extract sample names from file paths
-sampleNames <- basename(dirname(atacFiles))
-
-# Name the files with sample names
-names(atacFiles) <- sampleNames
-names(rnaFiles) <- sampleNames
+# Ensure symmetric sample matching
+commonSamples <- intersect(names(atacFiles), names(rnaFiles))
+if (length(commonSamples) == 0) {
+  stop("No matching sample pairs found between ATAC fragments and RNA matrix files.")
+}
+atacFiles <- atacFiles[commonSamples]
+rnaFiles  <- rnaFiles[commonSamples]
 
 # Set genome to hg (human genome)
 addArchRGenome("hg38")
@@ -107,12 +110,6 @@ print("ATAC input files:")
 print(atacFiles)
 print("RNA input files:")
 print(rnaFiles)
-
-# Remove sample "Zadeh_Shelia__61" (deemed low quality in scRNA))
-remove_sample <- "Zadeh_Shelia__61"
-if (remove_sample %in% names(atacFiles)) {
-  atacFiles <- atacFiles[names(atacFiles) != remove_sample]
-}
 
 print("Starting create arrowFiles")
 
@@ -129,16 +126,6 @@ ArrowFiles <- createArrowFiles(
 # vector of paths to all samples
 print("Created ArrowFiles:")
 print(ArrowFiles)
-# Uncomment the following line if you want to use specific Arrow files
-# ArrowFiles <- c("SM122_BR4.arrow","SM222_AR1.arrow","SM222_GL1.arrow")
-
-# Create diagnostic ArchRProject to check ArrowFiles
-print("Creating diagnostic ArchR Project to check ArrowFiles")
-projCheck <- ArchRProject(
-  ArrowFiles = c("GSM8820713_6467_A.arrow","GSM8820714_6467_B.arrow"), 
-  outputDirectory = "Gaiti_multiome_check",
-  copyArrows = FALSE #This is recommended so that you maintain an unaltered copy for later usage.
-)
 
 # Create ArchR project
 print("Creating ArchR Project")
@@ -147,93 +134,13 @@ projMulti1 <- ArchRProject(
   outputDirectory = "Gaiti_multiome",
   copyArrows = TRUE #This is recommended so that you maintain an unaltered copy for later usage.
 )
-# add doublet scores
-#print("Adding doublet scores to ArchR Project")
-#projMulti1 <- addDoubletScores(projMulti1, force = TRUE)
 
 # show available matrices for the project
 print("Available matrices in the ArchR Project:") 
 getAvailableMatrices(projMulti1) #  "GeneScoreMatrix" "TileMatrix" 
 
-# # Check if matrix_file, barcode_file, and features_file are of the same length
-# if (length(matrix_file) != length(barcode_file) || length(matrix_file) != length(features_file)) {
-#   stop("The number of matrix, barcode, and features files do not match!")
-# }
-
-# # Extract prefixes from ArrowFiles
-# arrow_prefixes <- sub("\\.arrow$", "", basename(ArrowFiles))
-
-# # Extract prefixes from matrix_file, barcode_file, and features_file
-# matrix_prefixes <- sub("_matrix\\.mtx\\.gz$", "", basename(matrix_file))
-# barcode_prefixes <- sub("_barcodes\\.tsv\\.gz$", "", basename(barcode_file))
-# features_prefixes <- sub("_features\\.tsv\\.gz$", "", basename(features_file))
-
-# # Check if all prefixes match
-# if (!all(matrix_prefixes == barcode_prefixes & barcode_prefixes == features_prefixes)) {
-#   stop("Prefixes of matrix, barcode, and features files do not match!")
-# }
-
-# # Check if prefixes match the ArrowFile prefixes
-# if (!all(matrix_prefixes %in% arrow_prefixes)) {
-#   stop("Prefixes of input files do not match the prefixes of ArrowFiles!")
-# }
-
-# print("All checks passed: matrix, barcode, and features files are consistent and match ArrowFiles.")
-
-# # For each Arrow file, read the corresponding RNA data and add GeneExpressionMatrix
-
-# for (i in seq_along(ArrowFiles)) {
-#   message(paste0("Adding GeneExpression matrix to Arrow file for sample ", names(ArrowFiles)[i], ": ", ArrowFiles[i]))
-
-# # Read the data
-# message("Reading matrix...")
-# print(matrix_file[i])
-# mat <- readMM(matrix_file[i])
-# message("Reading features and barcodes...")
-# barcodes <- fread(barcode_file[i], header = FALSE)$V1
-# features <- fread(features_file[i], header = FALSE)
-
-# # Name the feature columns for clarity
-# # 10x Multiome features.tsv has 3 columns: ID, Name, Type
-# colnames(features) <- c("id", "name", "type","seqnames", "start", "end")
-
-# message("Splitting the matrix...")
-
-# # Find the row indices for "Gene Expression"
-# gex_indices <- which(features$type == "Gene Expression")
-
-# # Subset the main matrix to get *only* the GEX counts
-# gex_mat <- mat[gex_indices, ]
-
-# # Get the corresponding feature metadata for GEX
-# gex_features <- features[gex_indices, ]
-
-# # Set the row and column names for the GEX matrix
-# # Use the gene *name* (e.g., "SOX2") as rownames, as this is standard.
-# rownames(gex_mat) <- gex_features$name
-# colnames(gex_mat) <- barcodes
-
-# message("Creating SummarizedExperiment...")
-
-# # Create the SummarizedExperiment (seGEX)
-# seGEX <- SummarizedExperiment(
-#   assays = list(counts = gex_mat),
-#   rowData = gex_features,
-#   colData = S4Vectors::DataFrame(row.names = colnames(gex_mat))
-# )
-
-# print("Verifying SummarizedExperiment object:")
-# print(seGEX)
-# print("Row data of SummarizedExperiment:")
-# print(rowData(seGEX))
-
 # Current directory
-print(paste0("Current working directory:",getwd() ))
-
-# Apply the patch
-#print("Applying patch to import10xFeatureMatrix function")
-#source("scripts/patch_function.r")
-#patch_import10x_function("ArchR")
+print(paste0("Current working directory:", getwd()))
 
 # import rna data
 print("importing scRNA data")
@@ -243,34 +150,11 @@ seRNA <- import10xFeatureMatrix(
   strictMatch = TRUE
 )
 
-# Add GeneExpressionMatrix to ArrowFiles
-# print("Adding GeneExpressionMatrix to ArrowFile")
-
-# addGeneExpressionMatrix(
-#   input = projMulti1,
-#   #input = paste0("./", ArrowFiles[i]),
-#   seRNA = seGEX,
-#   force = TRUE
-# )
-# message("Done! Your GEX data is now in the arrowfiles.")
-# }
-
-
-# Check if the cell names in the RNA data match the Arrow files:
-# 1. Retrieve GeneExpressionMatrix from the ArchRProject
-# print("Retrieving GeneExpressionMatrix from ArchRProject")
-# seRNA <- getMatrixFromProject(ArchRProj = projMulti1, 
-#                               useMatrix = "GeneExpressionMatrix")
-
-print("Number of cells in ArchRProject")
+print("Number of cells in ArchRProject:")
 length(getCellNames(projMulti1))
-print("Number of cells in ArchRProject diagnostic check")
-length(getCellNames(projCheck))
 
 print("Number of cell names in Arrow files not in RNA data:")
 length(which(getCellNames(projMulti1) %ni% colnames(seRNA)))
-print("Number of cell names in Arrow files not in RNA data:")
-length(which(getCellNames(projCheck) %ni% colnames(seRNA)))
 
 # keep only the cells that are in the RNA data
 print("Keeping cells that are in RNA data")
@@ -307,14 +191,7 @@ projMulti2 <- addGeneExpressionMatrix(input = projMulti2, seRNA = seRNA, strictM
 print("Cell counts after adding gene expression matrix:")
 table(projMulti2$Sample)
 
-# Save the project
-#print("Saving the project")
-#saveArchRProject(ArchRProj = projMulti2, outputDirectory = "Gaiti_multiome", load = TRUE)
-
 # filter doublets; note addDoubletScores must be run previously
-## Default filterRatio = 1; this is a consistent filter applied on all samples
-## Can be adjusted to filter more cells
-
 print("Adding doublet scores to ArchR Project")
 projMulti2 <- addDoubletScores(projMulti2, force = TRUE)
 

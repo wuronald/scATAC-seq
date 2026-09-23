@@ -9,6 +9,24 @@
 #SBATCH --mem=58G
 #SBATCH --time=08:00:00
 
+# ==============================================================================
+# Purpose: SLURM batch submission script to perform dimensionality reduction (Iterative LSI),
+#          UMAP embedding generation, clustering, and QC visualization for the
+#          Gaiti et al. integrated multiome ArchR project.
+# Workflow:
+#   1. Loads ArchR project 'Gaiti_multiome/'.
+#   2. Computes Iterative LSI on TileMatrix ('LSI_ATAC') and GeneExpressionMatrix ('LSI_RNA').
+#   3. Validates modality overlap, checks for NAs, and subsets to common cells.
+#   4. Combines reduced dimensions ('LSI_Combined') and generates 3 UMAP embeddings.
+#   5. Identifies cell clusters across all three dimension reductions (resolution = 0.4).
+#   6. Exports UMAP cluster plots, sample distribution plots, and an ATAC-vs-RNA confusion matrix.
+#   7. Saves updated project back to 'Gaiti_multiome/'.
+# Output:  Updated 'Gaiti_multiome/' ArchR project + Plots/ PDF reports
+#
+# Example usage:
+#   sbatch scripts/run_02_Gaiti_multiome_reduceDims.sh
+# ==============================================================================
+
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
 
@@ -148,7 +166,7 @@ p <- lapply(list(p1,p2,p3), function(x){
 
 ## save PDF of UMAPs
 print("save pdf of UMAP")
-plotPDF(p1,p2,p3,p,
+plotPDF(p1, p2, p3,
         name = "Gaiti_multiome-scATAC-scRNA-Combined.pdf", 
         ArchRProj = projMulti2, # PDF saved in the plots subfolder in the associated project directory
         addDOC = TRUE, # adds date of creation to end of filename

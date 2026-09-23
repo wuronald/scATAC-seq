@@ -9,9 +9,24 @@
 #SBATCH --mem=60G
 #SBATCH --time=06:00:00
 
-# ─── Usage ────────────────────────────────────────────────────────────────────
-# Parameters are passed via sbatch --export. All are optional; defaults are used
-# for any variable not supplied.
+# ==============================================================================
+# Purpose: SLURM batch submission script to perform pseudo-bulk group coverage,
+#          reproducible MACS2 peak calling, PeakMatrix creation, marker peak
+#          identification, and targeted pairwise differential testing (PIMO_Region,
+#          Region.annotation) for the Gaiti multiome ArchR project.
+# Workflow:
+#   1. Loads ArchR project (default: 'Gaiti_multiome_harmony_merged/').
+#   2. Optionally subsets to malignant, correctly labelled cells ('Azimuth_class == "Malignant" & mislabelled == "Correct"').
+#   3. Adds 'PIMO_Region' metadata column if not present.
+#   4. Generates pseudo-bulk group coverages ('addGroupCoverages') across specified 'groupBy' metadata columns.
+#   5. Calls reproducible peak sets with MACS2 ('addReproduciblePeakSet') and saves GRanges peak sets.
+#   6. Adds 'PeakMatrix' and identifies marker peaks ('getMarkerFeatures') with bias matching.
+#   7. Runs targeted pairwise differential tests for 'PIMO_Region' and 'Region.annotation'.
+#   8. Saves the peak-annotated ArchR project.
+#
+# Usage:
+#   Parameters are passed via sbatch --export. All are optional; defaults are used
+#   for any variable not supplied.
 #
 # Variables:
 #   ARCHR_PROJECT   Path to load the ArchR project
@@ -27,7 +42,7 @@
 #   sbatch scripts/run_05_Gaiti_multiome_peakCalling.sh
 #   sbatch --export=ALL,ARCHR_PROJECT=Gaiti_multiome_hmmp_k3_program_all_cells,SKIP_SUBSET=true,SUBSET_OUTDIR=Gaiti_multiome_hmmp_k3_program_all_cells,GROUP_BY_COLS=combined_program scripts/run_05_Gaiti_multiome_peakCalling.sh
 #   sbatch --export=ALL,ARCHR_PROJECT=Gaiti_multiome_harmony_merged_malig_peak,SKIP_SUBSET=true,SUBSET_OUTDIR=Gaiti_multiome_harmony_merged_malig_peak,GROUP_BY_COLS=PIMO_Region scripts/run_05_Gaiti_multiome_peakCalling.sh
-# ──────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
 
 ARCHR_PROJECT="${ARCHR_PROJECT:-Gaiti_multiome_harmony_merged}"
 SKIP_SUBSET="${SKIP_SUBSET:-false}"
@@ -81,7 +96,7 @@ proj_hyp <- loadArchRProject(path = archr_project_path)
 if (!skip_subset) {
   print("Subsetting ArchR object to only malignant cells and not mislabelled cells")
   malignant_cells <- proj_hyp$cellNames[which(proj_hyp$Azimuth_class == "Malignant" & proj_hyp$mislabelled == "Correct")]
-  print(paste("Number of malignant non-ambiguous cells:", length(malignant_cells)))
+  print(paste("Number of malignant correctly labelled cells:", length(malignant_cells)))
 
   # add additional metadata columns if not already present
   if (!"PIMO_Region" %in% colnames(proj_hyp@cellColData)) {
@@ -121,13 +136,20 @@ if (length(missing_cols) > 0) {
 }
 
 # ─── Find MACS2 path ─────────────────────────────────────────────────────────
+# Note: Adjust default HPC path fallback below to match your cluster/system settings if needed.
 if (exists("findMacs2")) {
   pathToMacs2 <- findMacs2()
-  if (!is.null(pathToMacs2)) {
+  if (is.null(pathToMacs2) || !nzchar(pathToMacs2)) {
+    # Fallback if findMacs2() cannot find it in PATH or standard locations
+    cluster_macs2 <- "/cluster/tools/software/rocky9/MACS/2.2.7.1/bin/macs2"
+    if (file.exists(cluster_macs2)) {
+      pathToMacs2 <- cluster_macs2
+    }
+  }
+  if (!is.null(pathToMacs2) && nzchar(pathToMacs2)) {
     print(paste("MACS2 found at:", pathToMacs2))
-    pathToMacs2 <- "/cluster/tools/software/rocky9/MACS/2.2.7.1/bin/macs2"
   } else {
-    stop("MACS2 not found or path is invalid. Please check your MACS2 installation.")
+    stop("MACS2 not found or path is invalid. Please check your MACS2 installation or adjust pathToMacs2.")
   }
 } else {
   stop("findMacs2() function not found. Please ensure ArchR is installed correctly.")
@@ -135,6 +157,10 @@ if (exists("findMacs2")) {
 
 # Initialise list to store one proj_hyp2 per groupBy for use in pairwise tests below
 proj_hyp2_list <- list()
+
+# Ensure output PeakCalls directory exists
+peak_calls_dir <- file.path(subset_outdir, "PeakCalls")
+dir.create(peak_calls_dir, showWarnings = FALSE, recursive = TRUE)
 
 # ─── Peak calling loop ────────────────────────────────────────────────────────
 for (groupBy in groupBy_list) {
@@ -163,9 +189,6 @@ for (groupBy in groupBy_list) {
   print(table(myPeakSet$peakType))
 
   # Save the peakSet gr object
-  peak_calls_dir <- file.path(subset_outdir, "PeakCalls")
-  dir.create(peak_calls_dir, showWarnings = FALSE, recursive = TRUE)
-  
   peakset_path <- file.path(peak_calls_dir, paste0("PeakSet_gr_", groupBy, ".rds"))
   print(paste("Saved peakSet as .rds for", groupBy, "to", peakset_path))
   saveRDS(myPeakSet, file = peakset_path)
@@ -236,9 +259,9 @@ if ("PIMO_Region" %in% groupBy_list) {
     useGroups = "PIMOup_EB",
     bgdGroups = "PIMOup_TC"
   )
-  saveRDS(markerTest, file = file.path(subset_outdir, "PeakCalls", "markersTest_PIMO_Region_PIMOup_EB_vs_PIMOup_TC.rds"))
+  saveRDS(markerTest, file = file.path(peak_calls_dir, "markersTest_PIMO_Region_PIMOup_EB_vs_PIMOup_TC.rds"))
   markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
-  saveRDS(markerTest_GR, file = file.path(subset_outdir, "PeakCalls", "markersTest_GR_PIMO_Region_PIMOup_EB_vs_PIMOup_TC.rds"))
+  saveRDS(markerTest_GR, file = file.path(peak_calls_dir, "markersTest_GR_PIMO_Region_PIMOup_EB_vs_PIMOup_TC.rds"))
 
   # 2. PIMOup_EB vs PIMOdown_EB
   print("Pairwise test between PIMO_Region groups: PIMOup_EB vs PIMOdown_EB")
@@ -251,9 +274,9 @@ if ("PIMO_Region" %in% groupBy_list) {
     useGroups = "PIMOup_EB",
     bgdGroups = "PIMOdown_EB"
   )
-  saveRDS(markerTest, file = file.path(subset_outdir, "PeakCalls", "markersTest_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB.rds"))
+  saveRDS(markerTest, file = file.path(peak_calls_dir, "markersTest_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB.rds"))
   markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
-  saveRDS(markerTest_GR, file = file.path(subset_outdir, "PeakCalls", "markersTest_GR_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB.rds"))
+  saveRDS(markerTest_GR, file = file.path(peak_calls_dir, "markersTest_GR_PIMO_Region_PIMOup_EB_vs_PIMOdown_EB.rds"))
 
   # 3. PIMOup_TC vs PIMOdown_TC
   print("Pairwise test between PIMO_Region groups: PIMOup_TC vs PIMOdown_TC")
@@ -266,9 +289,9 @@ if ("PIMO_Region" %in% groupBy_list) {
     useGroups = "PIMOup_TC",
     bgdGroups = "PIMOdown_TC"
   )
-  saveRDS(markerTest, file = file.path(subset_outdir, "PeakCalls", "markersTest_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC.rds"))
+  saveRDS(markerTest, file = file.path(peak_calls_dir, "markersTest_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC.rds"))
   markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
-  saveRDS(markerTest_GR, file = file.path(subset_outdir, "PeakCalls", "markersTest_GR_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC.rds"))
+  saveRDS(markerTest_GR, file = file.path(peak_calls_dir, "markersTest_GR_PIMO_Region_PIMOup_TC_vs_PIMOdown_TC.rds"))
 
   # 4. PIMOup_PT vs PIMOdown_PT
   print("Pairwise test between PIMO_Region groups: PIMOup_PT vs PIMOdown_PT")
@@ -281,9 +304,9 @@ if ("PIMO_Region" %in% groupBy_list) {
     useGroups = "PIMOup_PT",
     bgdGroups = "PIMOdown_PT"
   )
-  saveRDS(markerTest, file = file.path(subset_outdir, "PeakCalls", "markersTest_PIMO_Region_PIMOup_PT_vs_PIMOdown_PT.rds"))
+  saveRDS(markerTest, file = file.path(peak_calls_dir, "markersTest_PIMO_Region_PIMOup_PT_vs_PIMOdown_PT.rds"))
   markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
-  saveRDS(markerTest_GR, file = file.path(subset_outdir, "PeakCalls", "markersTest_GR_PIMO_Region_PIMOup_PT_vs_PIMOdown_PT.rds"))
+  saveRDS(markerTest_GR, file = file.path(peak_calls_dir, "markersTest_GR_PIMO_Region_PIMOup_PT_vs_PIMOdown_PT.rds"))
 }
 
 # ─── Pairwise tests for Region.annotation (if Region.annotation in groupBy_list) ─
@@ -302,9 +325,9 @@ if ("Region.annotation" %in% groupBy_list) {
     useGroups = "EB",
     bgdGroups = "TC"
   )
-  saveRDS(markerTest, file = file.path(subset_outdir, "PeakCalls", "markersTest_Region.annotation_EB_vs_TC.rds"))
+  saveRDS(markerTest, file = file.path(peak_calls_dir, "markersTest_Region.annotation_EB_vs_TC.rds"))
   markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
-  saveRDS(markerTest_GR, file = file.path(subset_outdir, "PeakCalls", "markersTest_GR_Region.annotation_EB_vs_TC.rds"))
+  saveRDS(markerTest_GR, file = file.path(peak_calls_dir, "markersTest_GR_Region.annotation_EB_vs_TC.rds"))
 
   # 2. EB vs PT
   print("Pairwise test between Region.annotation groups: EB vs PT")
@@ -317,9 +340,9 @@ if ("Region.annotation" %in% groupBy_list) {
     useGroups = "EB",
     bgdGroups = "PT"
   )
-  saveRDS(markerTest, file = file.path(subset_outdir, "PeakCalls", "markersTest_Region.annotation_EB_vs_PT.rds"))
+  saveRDS(markerTest, file = file.path(peak_calls_dir, "markersTest_Region.annotation_EB_vs_PT.rds"))
   markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
-  saveRDS(markerTest_GR, file = file.path(subset_outdir, "PeakCalls", "markersTest_GR_Region.annotation_EB_vs_PT.rds"))
+  saveRDS(markerTest_GR, file = file.path(peak_calls_dir, "markersTest_GR_Region.annotation_EB_vs_PT.rds"))
 
   # 3. TC vs PT
   print("Pairwise test between Region.annotation groups: TC vs PT")
@@ -332,9 +355,9 @@ if ("Region.annotation" %in% groupBy_list) {
     useGroups = "TC",
     bgdGroups = "PT"
   )
-  saveRDS(markerTest, file = file.path(subset_outdir, "PeakCalls", "markersTest_Region.annotation_TC_vs_PT.rds"))
+  saveRDS(markerTest, file = file.path(peak_calls_dir, "markersTest_Region.annotation_TC_vs_PT.rds"))
   markerTest_GR <- getMarkers(markerTest, cutOff = "FDR <= 1 & abs(Log2FC) >= 0", returnGR = TRUE)
-  saveRDS(markerTest_GR, file = file.path(subset_outdir, "PeakCalls", "markersTest_GR_Region.annotation_TC_vs_PT.rds"))
+  saveRDS(markerTest_GR, file = file.path(peak_calls_dir, "markersTest_GR_Region.annotation_TC_vs_PT.rds"))
 }
 
 # ─── Save the project ─────────────────────────────────────────────────────────

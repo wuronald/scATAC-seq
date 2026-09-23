@@ -9,14 +9,30 @@
 #SBATCH --mem=30G
 #SBATCH --time=01:00:00
 
-# Load necessary modules (adjust as needed for your system)
-module load R/4.4.1
-
-# Note: Run R markdown notebook to generate/pre-process seurat object metadata before running this script.
-# eg. human_multiome_merged_seurat_archr.Rmd for human_multiome
-# eg. mouse_multiome_merged_seurat_archr.Rmd for mouse_multiome
-# eg. Gaiti_multiome_merged_seurat_archr.Rmd for Gaiti_multiome
-
+# ==============================================================================
+# Purpose: SLURM batch submission script to import cell-level metadata annotations
+#          from Seurat single-cell RNA-seq objects, match multi-modal cell barcodes,
+#          subset the ArchR project to overlapping cells, and append annotations
+#          into ArchR cellColData.
+#
+# Pre-requisite:
+#   Run the corresponding R Markdown notebook to generate and pre-process the
+#   Seurat object metadata CSV before running this script:
+#     - eg. human_multiome_merged_seurat_archr.Rmd for human_multiome
+#     - eg. mouse_multiome_merged_seurat_archr.Rmd for mouse_multiome
+#     - eg. Gaiti_multiome_merged_seurat_archr.Rmd for Gaiti_multiome
+#
+# Workflow:
+#   1. Loads source ArchR project (e.g. 'human_multiome_harmony/').
+#   2. Detects species and loads appropriate BSgenome ('hg38' for human, 'mm10' for mouse).
+#   3. Loads Seurat metadata CSV (e.g. 'merged_seurat_metadata.csv').
+#   4. Subsets ArchR project to cells overlapping Seurat RNA/GEX barcodes.
+#   5. Verifies identical cell barcode ordering between ArchR and Seurat metadata.
+#   6. Appends requested metadata columns (e.g. Azimuth, PIMO status, tumor states)
+#      to ArchR cellColData via addCellColData().
+#   7. Exports QC summaries (TSS enrichment, nFrags, doublet score distributions).
+#   8. Saves merged ArchR project into output directory (default: '<ARCHR_DIR>_merged').
+#
 # Usage:
 #   sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh <ARCHR_DIR> [OUTPUT_DIR] [METADATA_PATH] [COLUMNS]
 #
@@ -32,10 +48,21 @@ module load R/4.4.1
 #                       Ambiguous,PIMO_status,PIMO_up_status)
 #
 # Examples:
-#   sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh human_multiome_harmony_merged_malig_peak
-#   sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh human_multiome_harmony_merged_malig_peak human_multiome_hmmp_nomura
-#   sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh human_multiome_harmony_merged_malig_peak "" data/metadata/human_multiome/merged_seurat_nomura_metadata_subset.csv
+#   # Standard Human Multiome merge:
+#   sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh human_multiome_harmony
+#
+#   # Standard Gaiti Multiome merge:
+#   sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh Gaiti_multiome_harmony
+#
+#   # Custom output directory and metadata path:
+#   sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh human_multiome_harmony human_multiome_harmony_merged data/metadata/human_multiome/merged_seurat_metadata.csv
+#
+#   # Custom column transfer (e.g., cNMF or meta-modules):
 #   sbatch scripts/export_02_merged_metadata_seurat_archR_objects.sh human_multiome_harmony_merged_malig_peak human_multiome_hmmp_nomura data/metadata/human_multiome/merged_seurat_nomura_metadata_subset.csv "meta_module"
+# ==============================================================================
+
+# Load necessary modules (adjust as needed for your system)
+module load R/4.4.1
 
 # --- Parse positional arguments ---
 ARCHR_DIR="$1"
@@ -136,9 +163,8 @@ if (grepl("human", archr_dir, ignore.case=TRUE)) {
     genome <- "hg38"
 }
 
-
 # Set the number of threads for ArchR
-addArchRThreads(threads = 9)
+addArchRThreads(threads = as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", unset = "8")))
 
 # Load the project
 print(paste("Loading ArchR project from", archr_dir))

@@ -9,23 +9,53 @@
 #SBATCH --mem=60G
 #SBATCH --time=01:00:00
 
-# Parse command line arguments
-# First argument: groupBy variable (e.g., "PIMO_up_status", "hybrid_pair", "k3_program")
-# Second argument: path to directory containing BED files
-# Third argument (optional): pattern to match BED files (e.g., "PIMO_MP", "Nomura_")
-# Fourth argument (optional): "force" to re-export bigWig files even if they exist
-# Fifth argument (optional): path to a metadata CSV to add to the ArchR object before export.
-#                            The CSV must contain a "cell_id" column matching ArchR cell names.
-#                            When provided, the ArchR object is subset to cells present in the
-#                            CSV that have a non-NA cNMF_program. The cNMF_program column is
-#                            renamed to match the groupBy argument (e.g. "k3_program", "k9_program"),
-#                            so the first argument should reflect the K value of the CSV supplied.
-
-# Example usage:
-# sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh PIMO_up_status data/Signatures/PIMO_metaprogram/ PIMO_MP
-# sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh PIMO_up_status data/Signatures/nomura Nomura_
-# sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh k3_program data/Signatures/PIMO_metaprogram PIMO_MP no data/metadata/human_multiome/cNMF_cell_program_assignment_with_usages_K3.csv
-# sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh k9_program data/Signatures/cNMF cNMF_ no data/metadata/human_multiome/cNMF_cell_program_assignment_with_usages_K9.csv
+# ==============================================================================
+# Purpose: SLURM batch submission script to export pseudo-bulk chromatin
+#          accessibility bigWig files from an ArchR project and generate
+#          signal heatmaps and profile plots across genomic regions using deepTools.
+#
+# Workflow:
+#   1. (Optional) Adds cell-level metadata (e.g., cNMF program assignments) from a CSV
+#      and subsets the ArchR project to cells with non-NA program values
+#      (saved to separate directory 'human_multiome_hmmp_<GROUP_BY>').
+#   2. Verifies or generates group-level pseudo-bulk bigWig files (.bw) using
+#      ArchR getGroupBW() (normalized by ReadsInTSS, tileSize=100bp, maxCells=500, ceiling=4).
+#   3. Locates target BED region files matching the specified pattern in BED_DIR.
+#   4. Runs deepTools computeMatrix in both reference-point (TSS/center +/- 2.5kb)
+#      and scale-regions (gene body 5kb with +/- 2kb flanks) modes.
+#   5. Runs deepTools plotHeatmap to produce sorted signal intensity heatmaps (PDF).
+#   6. Runs deepTools plotProfile to produce aggregate ATAC signal distribution profiles (PDF).
+#
+# Usage:
+#   sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh \
+#       [GROUP_BY] [BED_DIR] [BED_PATTERN] [FORCE_EXPORT] [METADATA_CSV]
+#
+# Arguments (all positional, optional):
+#   $1  GROUP_BY      Metadata column to group cells by for bigWig export
+#                     (default: PIMO_up_status)
+#   $2  BED_DIR       Directory containing BED region files
+#                     (default: data/Signatures)
+#   $3  BED_PATTERN   Filename pattern matching BED files to include
+#                     (default: PIMO_MP)
+#   $4  FORCE_EXPORT  Whether to force re-exporting bigWig files if they exist (yes/no)
+#                     (default: no)
+#   $5  METADATA_CSV  Optional path to cell metadata CSV (must contain 'cell_id' and
+#                     'cNMF_program' columns). Subsets project to matching cells and
+#                     renames program to GROUP_BY.
+#
+# Examples:
+#   # Standard PIMO status pseudo-bulk heatmaps with PIMO metaprogram BED files:
+#   sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh PIMO_up_status data/Signatures/PIMO_metaprogram/ PIMO_MP
+#
+#   # Nomura signature heatmaps:
+#   sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh PIMO_up_status data/Signatures/nomura Nomura_
+#
+#   # cNMF K=3 metaprogram subset and heatmaps:
+#   sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh k3_program data/Signatures/PIMO_metaprogram PIMO_MP no data/metadata/human_multiome/cNMF_cell_program_assignment_with_usages_K3.csv
+#
+#   # cNMF K=9 metaprogram subset and heatmaps:
+#   sbatch scripts/export_04_pseudobulk_bigwig_heatmaps.sh k9_program data/Signatures/cNMF cNMF_ no data/metadata/human_multiome/cNMF_cell_program_assignment_with_usages_K9.csv
+# ==============================================================================
 
 GROUP_BY="${1:-PIMO_up_status}"  # Default to "PIMO_up_status" if no argument provided
 BED_DIR="${2:-data/Signatures}"  # Default BED directory

@@ -9,10 +9,29 @@
 #SBATCH --mem=60G
 #SBATCH --time=04:00:00
 
+# ==============================================================================
+# Purpose: SLURM batch submission script to perform Harmony batch correction
+#          across single-cell ATAC, RNA, and Combined reduced dimensions for the
+#          Gaiti et al. multiome ArchR project (26 samples, 6 patients).
+# Workflow:
+#   1. Loads ArchR project 'Gaiti_multiome/'.
+#   2. Assigns patient batch groupings ('lib_batch') for patient IDs 6419–6514.
+#   3. Runs Harmony batch correction on LSI_ATAC, LSI_RNA, and LSI_Combined correcting
+#      for c("Sample", "lib_batch").
+#   4. Identifies cell clusters on Harmony spaces (resolution = 0.4).
+#   5. Computes UMAP embeddings (nNeighbors = 40, minDist = 0.5, metric = "cosine").
+#   6. Exports UMAP diagnostic plots colored by Sample and Harmony clusters.
+#   7. Saves harmonized project into 'Gaiti_multiome_harmony/'.
+# Output:  'Gaiti_multiome_harmony/' ArchR project directory + Plots/
+#
+# Example usage:
+#   sbatch scripts/run_03_Gaiti_multiome_harmony.sh
+# ==============================================================================
+
 # Load necessary modules (adjust as needed for your system)
 module load R/4.4.1
 
-# Run R scriptmv
+# Run R script
 Rscript - <<'EOF'
 
 # load libraries
