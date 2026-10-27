@@ -234,7 +234,7 @@ markersTest_gr_PIMOup_TC_vs_PIMOdown_TC <- readRDS(
   )
 )
 sapply(assays(markersTest_PIMOup_TC_vs_PIMOdown_TC), function(x) sum(is.na(x)))
-edaPeaks(markersTest_gr_PIMOup_TC_vs_PIMOdown_TC$PIMOup)
+#edaPeaks(markersTest_gr_PIMOup_TC_vs_PIMOdown_TC$PIMOup)
 
 
 # For PIMOup_TC_vs_PIMOdown_TC (useGroups=PIMOup_TC, bgdGroups = PIMOdown_TC)
@@ -567,9 +567,9 @@ export_master_excel(
   file_path = here(
     "figures", 
     "supplemental_table", 
-    "Supplementary_table_9.xlsx"
+    "Supplementary_Table_10_Overall_ATAC.xlsx"
   ),
-  workbook_description = "This workbook contains consensus peak sets, differentially accessible regions (DARs), and enriched motifs for the human multiome dataset. The associated tables were generated for each group of interest: PIMO_up_status and k3_program. For k3_program, program_1, program_2, and program_3 refer to the EGFR/HIF(RTK), Connective and Reactive programs respectively as mentioned in the main text. For DARs, only significant peak regions are shown if any."
+  workbook_description = "This workbook contains consensus peak sets, differentially accessible regions (DARs), and enriched motifs for the human multiome dataset. The associated tables were generated for each group of interest: PIMO_up_status and k3_program. For k3_program, program_1, program_2, and program_3 refer to the EGFR/HIF, Connective and Reactive programs respectively as mentioned in the main text. For DARs, only significant peak regions are shown if any."
 )
 
 ```
